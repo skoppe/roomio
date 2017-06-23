@@ -1,0 +1,20 @@
+name "roomio"
+description "Multi room audio"
+authors "Sebastiaan Koppe"
+copyright "Copyright © 2017, Sebastiaan Koppe"
+license "proprietary"
+dependency "cerealed" version="~>0.6.8"
+dependency "vibe-d" version="~>0.8.0-rc.1"
+
+configuration "executable" {
+  targetType "executable"
+}
+configuration "unittest" {
+	preBuildCommands "dub run unit-threaded -c gen_ut_main -- -f bin/ut.d"
+	importPaths "bin"
+	mainSourceFile "bin/ut.d"
+	excludedSourceFiles "source/app.d"
+	targetType "executable"
+	dependency "unit-threaded" version="==0.7.2"
+	version "chatty" "tracing"
+}

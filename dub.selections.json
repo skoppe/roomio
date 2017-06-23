@@ -1,0 +1,15 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"cerealed": "0.6.8",
+		"diet-ng": "1.2.1",
+		"eventcore": "0.8.11",
+		"libasync": "0.8.3",
+		"libevent": "2.0.2+2.0.16",
+		"memutils": "0.4.9",
+		"taggedalgebraic": "0.10.7",
+		"unit-threaded": "0.7.2",
+		"vibe-core": "1.0.0-rc.1",
+		"vibe-d": "0.8.0-rc.1"
+	}
+}
