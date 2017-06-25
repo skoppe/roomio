@@ -5,8 +5,6 @@ import roomio.port;
 import roomio.connection;
 import roomio.messages;
 import roomio.transport;
-import vibe.core.net;
-import core.sys.posix.netinet.in_;
 import roomio.testhelpers;
 import std.meta : staticMap, AliasSeq;
 import std.traits : EnumMembers, Parameters, hasMember;

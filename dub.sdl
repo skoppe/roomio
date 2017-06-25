@@ -4,9 +4,10 @@ authors "Sebastiaan Koppe"
 copyright "Copyright © 2017, Sebastiaan Koppe"
 license "proprietary"
 dependency "cerealed" version="~>0.6.8"
-dependency "vibe-d" version="~>0.8.0-rc.1"
+dependency "vibe-d" path="../vibe.d/"
 
 configuration "executable" {
+  mainSourceFile "source/app.d"
   targetType "executable"
 }
 configuration "unittest" {

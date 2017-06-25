@@ -5,6 +5,7 @@ import roomio.id;
 import std.getopt;
 import vibe.core.core;
 import vibe.core.args;
+import vibe.core.log;
 
 int main(string[] args){
 
@@ -20,23 +21,25 @@ int main(string[] args){
     return 1;
   }
 
-  auto transport = new Transport(ip, port, 1900);
-  auto logger = new MessageLogger();
-  auto device = new Device!Transport(Id.random, "device", transport);
-
-  transport.connect(logger);
-
+  Transport transport;
   bool running = true;
-  runTask({
+  //runTask({
+      transport = new Transport(ip, port, 54544);
+      auto logger = new MessageLogger();
+      auto device = new Device!Transport(Id.random, "device", transport);
+
+      transport.connect(logger);
+      device.connect();
+      logInfo("Connected");
       while(running) {
         transport.acceptMessage();
       }
-    });
-  runTask({
-      device.connect();
-    });
+    //});
 
-  runEventLoop();
+  //runEventLoop();
+
+  logInfo("Closing connection");
+  transport.close();
 
   return 0;
 }

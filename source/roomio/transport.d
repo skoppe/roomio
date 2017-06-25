@@ -4,7 +4,7 @@ import roomio.id;
 import roomio.port;
 import roomio.connection;
 import roomio.messages;
-import vibe.core.net;
+//import vibe.core.net;
 import core.sys.posix.netinet.in_;
 import roomio.testhelpers;
 import std.meta : staticMap, AliasSeq;
@@ -12,32 +12,75 @@ import std.traits : EnumMembers, Parameters, hasMember;
 import std.uni : toLower;
 import std.algorithm : findSplit;
 import std.array : Appender;
+import core.time : msecs;
 
-struct Udp {
+struct UdpSocket {
+  import std.socket;
+  import std.stdio;
+  import std.bitmanip : nativeToBigEndian;
   private {
-    UDPConnection conn;
-    NetworkAddress addr;
+    Socket socket;
+    InternetAddress address;
+    Address bindAddr;
   }
-  this(string ip, ushort port, ushort targetPort) {
-    conn = listenUDP(port);
-    conn.canBroadcast = true;
-    addr = resolveHost(ip,AF_INET,false);
-    addr.port = targetPort;
-  }
-  void send(const ubyte[] data) {
-    conn.send(data, &addr);
-  }
-  auto receive(ubyte[] buffer) {
-    return conn.recv(buffer);
+  this(string ip, ushort port, ushort local_port, string bind = "0.0.0.0") {
+    address = new InternetAddress(ip, port);
+    bindAddr = getAddress(bind, local_port)[0];
+    socket = new Socket(AddressFamily.INET, SocketType.DGRAM, ProtocolType.UDP);
+    enum IP_ADD_MEMBERSHIP = 12;
+    struct ip_mreq {
+      core.sys.posix.arpa.inet.in_addr imr_multiaddr;   /* IP multicast address of group */
+      core.sys.posix.arpa.inet.in_addr imr_interface;   /* local IP address of interface */
+    }
+    static import core.sys.posix.arpa.inet;
+    auto mreq = ip_mreq(core.sys.posix.arpa.inet.in_addr(*cast(uint32_t*)address.addr().nativeToBigEndian.ptr), core.sys.posix.arpa.inet.in_addr(htonl(INADDR_ANY)));
+
+    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_ADD_MEMBERSHIP, (cast(void*)&mreq)[0..ip_mreq.sizeof]);
+    socket.bind(bindAddr);
   }
   void close() {
-    conn.close();
+    socket.close();
+  }
+  void send(const ubyte[] data) {
+    socket.sendTo(cast(const void[])data, address);
+  }
+  auto receive(ubyte[] buffer) {
+    ptrdiff_t size = socket.receive(cast(void[])buffer);
+    if (size < 0)
+      throw new Exception("Error");
+    return buffer[0..size];
+  }
+}
+
+version (none) {
+  struct UdpVibeD {
+    private {
+      UDPConnection conn;
+      NetworkAddress addr;
+    }
+    this(string ip, ushort port, ushort targetPort) {
+      conn = listenUDP(port);
+      conn.addMembership(ip);
+      conn.canBroadcast = true;
+      addr = resolveHost(ip,AF_INET,false);
+      addr.port = targetPort;
+    }
+    void send(const ubyte[] data) {
+      conn.send(data, &addr);
+    }
+    auto receive(ubyte[] buffer) {
+      return conn.recv(// 5000.msecs,
+                       buffer);
+    }
+    void close() {
+      conn.close();
+    }
   }
 }
 
 class Transport {
   private {
-    Udp udp;
+    UdpSocket udp;
     Dispatcher dispatcher;
     ubyte[] buffer;
     Appender!(ubyte[]) outBuffer;
@@ -49,16 +92,19 @@ class Transport {
     }
   }
   this(string ip, ushort port, ushort targetPort) {
-    udp = Udp(ip, port, targetPort);
+    udp = UdpSocket(ip, targetPort, port);
     getBuffer(2500);
+  }
+  void close() {
+    udp.close();
   }
   void connect(Device)(Device device) {
     dispatcher.connect(device);
   }
   void send(T)(T msg) {
 import vibe.core.log;
- logInfo("Sending: %s", msg);
     writeMessage(msg, outBuffer);
+    logInfo("Sending: %s (%s bytes)", msg, outBuffer.data.length);
     udp.send(outBuffer.data);
     outBuffer.clear();
   }
@@ -66,10 +112,14 @@ import vibe.core.log;
     import vibe.core.log;
     enum headerSize = messageSize(Header.init);
     logInfo("Reading Packet");
-    auto buf = udp.receive(getBuffer(2500));
-    auto header = readHeader(buf);
-    buf = udp.receive(getBuffer(header.size));
-    processMessage(header, buf, dispatcher);
+    try {
+      auto buf = udp.receive(getBuffer(2500));
+      auto header = readHeader(buf);
+      logInfo("Received Header: %s", header);
+      processMessage(header, buf, dispatcher);
+    } catch (Exception e) {
+      logInfo("Failed to receive: %s", e);
+    }
   }
 }
 
