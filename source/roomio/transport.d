@@ -18,6 +18,11 @@ struct UdpSocket {
   import std.socket;
   import std.stdio;
   import std.bitmanip : nativeToBigEndian;
+  version(OSX) {
+    import std.c.osx.socket;
+  } else version(linux) {
+    import std.c.linux.socket;
+  }
   private {
     Socket socket;
     InternetAddress address;
@@ -27,7 +32,6 @@ struct UdpSocket {
     address = new InternetAddress(ip, port);
     bindAddr = getAddress(bind, local_port)[0];
     socket = new Socket(AddressFamily.INET, SocketType.DGRAM, ProtocolType.UDP);
-    enum IP_ADD_MEMBERSHIP = 12;
     struct ip_mreq {
       core.sys.posix.arpa.inet.in_addr imr_multiaddr;   /* IP multicast address of group */
       core.sys.posix.arpa.inet.in_addr imr_interface;   /* local IP address of interface */
@@ -35,7 +39,10 @@ struct UdpSocket {
     static import core.sys.posix.arpa.inet;
     auto mreq = ip_mreq(core.sys.posix.arpa.inet.in_addr(*cast(uint32_t*)address.addr().nativeToBigEndian.ptr), core.sys.posix.arpa.inet.in_addr(htonl(INADDR_ANY)));
 
-    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_ADD_MEMBERSHIP, (cast(void*)&mreq)[0..ip_mreq.sizeof]);
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.BROADCAST, 1);
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, 1);
+    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_MULTICAST_LOOP, 0);
+    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_ADD_MEMBERSHIP, (&mreq)[0..1]);
     socket.bind(bindAddr);
   }
   void close() {
