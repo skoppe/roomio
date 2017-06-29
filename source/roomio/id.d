@@ -2,32 +2,33 @@ module roomio.id;
 
 import std.uuid;
 import roomio.testhelpers;
+import cerealed;
+
+@safe:
 
 struct Id {
-  private UUID uuid;
+  private ubyte[16] _raw;
   static Id random() {
-    return Id(randomUUID());
+    return Id(randomUUID.data);
   }
-  static Id test() {
-    return Id("01234567-0123-0123-0123-0123456789ab");
+  static Id test() @nogc {
+    return Id(cast(ubyte[])[1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171]);
   }
-  this(UUID u) {
-    this.uuid = u;
+  this(ubyte[16] raw) @nogc {
+    _raw = raw;
+  }
+  this(UUID u) @nogc {
+    this._raw = u.data;
   }
   this(string u) {
-    uuid = parseUUID(u);
+    _raw = parseUUID(u).data;
   }
-  string toString() {
-    return uuid.toString();
-  }
-  const ubyte[16] raw() {
-    return uuid.data;
-  }
-  bool opEquals(const Id other) const {
-    return this.uuid == other.uuid;
+  const(ubyte[16]) raw() @nogc { return _raw; }
+  bool opEquals(const Id other) @nogc const {
+    return this._raw == other._raw;
   }
   void accept(C)(auto ref C cereal) {
-    cereal.grain(uuid);
+    cereal.grain(_raw);
   }
 }
 

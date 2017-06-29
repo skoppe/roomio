@@ -109,7 +109,7 @@ class Transport {
     dispatcher.connect(device);
   }
   void send(T)(T msg) {
-import vibe.core.log;
+    import vibe.core.log;
     writeMessage(msg, outBuffer);
     logInfo("Sending: %s (%s bytes)", msg, outBuffer.data.length);
     udp.send(outBuffer.data);
