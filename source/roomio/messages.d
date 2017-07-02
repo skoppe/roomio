@@ -15,13 +15,14 @@ enum MessageType {
   LinkReply,
   Unlink,
   Ping,
-  Pong
+  Pong,
+  Audio
 }
 
 struct Header {
-  ubyte version_;
-  size_t size;
-  MessageType type;
+  /*@Bits!4*/ ubyte version_; // TODO: can use bits here if messageSize can handle them...
+  /*@Bits!12*/ ushort size;
+  /*@Bits!8*/ MessageType type;
 }
 
 struct PingMessage {
@@ -74,6 +75,11 @@ struct LinkReplyMessage {
 
 struct UnlinkMessage {
   Id connection;
+}
+
+struct AudioMessage {
+  short[] buffer;
+  size_t masterTime;
 }
 
 auto readHeader(ubyte[] raw) {
@@ -144,7 +150,8 @@ void writeMessage(T, Sink)(T msg, ref Sink sink)
   auto size = messageSize(msg);
   sink.reserve(size + headerSize);
   auto type = getMessageEnumType(msg);
-  Header hdr = Header(1, size, type);
+  assert(size < ushort.max);
+  Header hdr = Header(1, cast(ushort)size, type);
   auto cerealizer = CerealiserImpl!(Sink)(sink);
   cerealizer.write(hdr);
   cerealizer.write(msg);

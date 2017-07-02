@@ -21,7 +21,7 @@ struct DeviceInfo
   ConnectionInfo[] connections;
 }
 
-class Device(Transport) {
+class Device {
   private {
     Id id;
     string name;
@@ -88,5 +88,10 @@ class Device(Transport) {
   void onMessage(ref LinkReplyMessage msg) {}
   void onMessage(ref UnlinkMessage msg) {
     killConnection(connections.find!(c => c.id == msg.connection));
+  }
+  void close() {
+    foreach(c; connections)
+      c.kill();
+    connections = [];
   }
 }

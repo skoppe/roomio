@@ -1,6 +1,7 @@
 module roomio.port;
 
 import roomio.id;
+import roomio.transport;
 
 enum PortType {
   Input = 1,
@@ -12,12 +13,26 @@ struct PortInfo {
   PortType type;
   string name;
   uint channels;
-  uint samplerate;
+  double samplerate;
 }
 
-class Port {
+abstract class Port {
   Id id;
-  PortInfo getInfo() {
-    return PortInfo(id);
+  PortType type;
+  string name;
+  uint channels;
+  double samplerate;
+  this(Id id, PortType t, string n, uint c, double s)
+  {
+    this.id = id;
+    type = t;
+    name = n;
+    channels = c;
+    samplerate = s;
   }
+  PortInfo getInfo() {
+    return PortInfo(id, type, name, channels, samplerate);
+  }
+  void start(Transport transport);
+  void kill();
 }

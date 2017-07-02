@@ -2,6 +2,7 @@ module roomio.connection;
 
 import roomio.id;
 import roomio.port;
+import roomio.transport;
 
 enum Direction {
   In,
@@ -38,19 +39,27 @@ abstract class Connection {
     }
     return ConnectionInfo(id, port.id, other, direction, host, hostport);
   }
-  void kill();
+  void kill() { 
+    port.kill();
+  }
 }
 
 class OutgoingConnection : Connection {
+  private Transport transport;
   this(Id id, Port port, Id other, string host, ushort hostport) {
     super(id, port, other, Direction.Out, host, hostport);
+    assert(port.type == PortType.Input);
+    transport = new Transport(host, hostport, hostport);
+    port.start(transport);
   }
-  override void kill() {}
 }
 
 class IncomingConnection : Connection {
+  private Transport transport;
   this(Id id, Port port, Id other, string host, ushort hostport) {
     super(id, port, other, Direction.In, host, hostport);
+    assert(port.type == PortType.Output);
+    transport = new Transport(host, hostport, hostport);
+    port.start(transport);
   }
-  override void kill() {}
 }

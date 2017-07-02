@@ -4,7 +4,7 @@ import roomio.id;
 import roomio.port;
 import roomio.connection;
 import roomio.messages;
-//import vibe.core.net;
+import vibe.core.net;
 import core.sys.posix.netinet.in_;
 import roomio.testhelpers;
 import std.meta : staticMap, AliasSeq;
@@ -13,6 +13,9 @@ import std.uni : toLower;
 import std.algorithm : findSplit;
 import std.array : Appender;
 import core.time : msecs;
+import std.typecons : tuple;
+
+version (none) {
 
 struct UdpSocket {
   import std.socket;
@@ -58,8 +61,7 @@ struct UdpSocket {
     return buffer[0..size];
   }
 }
-
-version (none) {
+}
   struct UdpVibeD {
     private {
       UDPConnection conn;
@@ -69,6 +71,7 @@ version (none) {
       conn = listenUDP(port);
       conn.addMembership(ip);
       conn.canBroadcast = true;
+      //conn.multicastLoopback = false;
       addr = resolveHost(ip,AF_INET,false);
       addr.port = targetPort;
     }
@@ -76,18 +79,18 @@ version (none) {
       conn.send(data, &addr);
     }
     auto receive(ubyte[] buffer) {
-      return conn.recv(// 5000.msecs,
+      return conn.recv(1000.msecs,
                        buffer);
     }
     void close() {
       conn.close();
     }
   }
-}
+
 
 class Transport {
   private {
-    UdpSocket udp;
+    UdpVibeD udp;
     Dispatcher dispatcher;
     ubyte[] buffer;
     Appender!(ubyte[]) outBuffer;
@@ -99,7 +102,7 @@ class Transport {
     }
   }
   this(string ip, ushort port, ushort targetPort) {
-    udp = UdpSocket(ip, targetPort, port);
+    udp = UdpVibeD(ip, targetPort, port);
     getBuffer(2500);
   }
   void close() {
@@ -115,17 +118,23 @@ class Transport {
     udp.send(outBuffer.data);
     outBuffer.clear();
   }
+  auto acceptRaw() {
+    auto buf = udp.receive(getBuffer(2500));
+    auto header = readHeader(buf);
+    // TODO: Handle message fragmentation
+    return tuple!("header","data")(header, buf);
+  }
   void acceptMessage() {
     import vibe.core.log;
     enum headerSize = messageSize(Header.init);
-    logInfo("Reading Packet");
     try {
       auto buf = udp.receive(getBuffer(2500));
       auto header = readHeader(buf);
+      // TODO: Handle message fragmentation
       logInfo("Received Header: %s", header);
       processMessage(header, buf, dispatcher);
     } catch (Exception e) {
-      logInfo("Failed to receive: %s", e);
+      //logInfo("Failed to receive: %s", e);
     }
   }
 }
@@ -196,9 +205,11 @@ struct Dispatcher {
   void processMessage(Message)(Message msg) {
     foreach(MsgType; MessageTypes) {
       static if (is(Message : MsgType)) {
-        mixin("alias delegates = "~DelegatesField!MsgType~";");
-        foreach(del; delegates)
-          del(msg);
+        static if (hasMember!(typeof(this),"audio")) {
+          mixin("alias delegates = "~DelegatesField!MsgType~";");
+          foreach(del; delegates)
+            del(msg);
+        }
       }
     }
   }
