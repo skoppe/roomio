@@ -15,78 +15,30 @@ import std.array : Appender;
 import core.time : msecs;
 import std.typecons : tuple;
 
-version (none) {
-
-struct UdpSocket {
-  import std.socket;
-  import std.stdio;
-  import std.bitmanip : nativeToBigEndian;
-  version(OSX) {
-    import std.c.osx.socket;
-  } else version(linux) {
-    import std.c.linux.socket;
-  }
+struct UdpVibeD {
   private {
-    Socket socket;
-    InternetAddress address;
-    Address bindAddr;
+    UDPConnection conn;
+    NetworkAddress addr;
   }
-  this(string ip, ushort port, ushort local_port, string bind = "0.0.0.0") {
-    address = new InternetAddress(ip, port);
-    bindAddr = getAddress(bind, local_port)[0];
-    socket = new Socket(AddressFamily.INET, SocketType.DGRAM, ProtocolType.UDP);
-    struct ip_mreq {
-      core.sys.posix.arpa.inet.in_addr imr_multiaddr;   /* IP multicast address of group */
-      core.sys.posix.arpa.inet.in_addr imr_interface;   /* local IP address of interface */
-    }
-    static import core.sys.posix.arpa.inet;
-    auto mreq = ip_mreq(core.sys.posix.arpa.inet.in_addr(*cast(uint32_t*)address.addr().nativeToBigEndian.ptr), core.sys.posix.arpa.inet.in_addr(htonl(INADDR_ANY)));
-
-    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.BROADCAST, 1);
-    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, 1);
-    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_MULTICAST_LOOP, 0);
-    socket.setOption(SocketOptionLevel.IP, cast(SocketOption)IP_ADD_MEMBERSHIP, (&mreq)[0..1]);
-    socket.bind(bindAddr);
-  }
-  void close() {
-    socket.close();
+  this(string ip, ushort port, ushort targetPort, bool loopback = true) {
+    conn = listenUDP(port);
+    NetworkAddress multiaddr = resolveHost(ip, AF_INET);
+    conn.addMembership(multiaddr);
+    conn.canBroadcast = true;
+    conn.multicastLoopback = loopback;
+    addr = resolveHost(ip,AF_INET,false);
+    addr.port = targetPort;
   }
   void send(const ubyte[] data) {
-    socket.sendTo(cast(const void[])data, address);
+    conn.send(data, &addr);
   }
   auto receive(ubyte[] buffer) {
-    ptrdiff_t size = socket.receive(cast(void[])buffer);
-    if (size < 0)
-      throw new Exception("Error");
-    return buffer[0..size];
+    return conn.recv(1000.msecs, buffer);
+  }
+  void close() {
+    conn.close();
   }
 }
-}
-  struct UdpVibeD {
-    private {
-      UDPConnection conn;
-      NetworkAddress addr;
-    }
-    this(string ip, ushort port, ushort targetPort) {
-      conn = listenUDP(port);
-      conn.addMembership(ip);
-      conn.canBroadcast = true;
-      //conn.multicastLoopback = false;
-      addr = resolveHost(ip,AF_INET,false);
-      addr.port = targetPort;
-    }
-    void send(const ubyte[] data) {
-      conn.send(data, &addr);
-    }
-    auto receive(ubyte[] buffer) {
-      return conn.recv(1000.msecs,
-                       buffer);
-    }
-    void close() {
-      conn.close();
-    }
-  }
-
 
 class Transport {
   private {
@@ -101,8 +53,8 @@ class Transport {
       return buffer[0..size];
     }
   }
-  this(string ip, ushort port, ushort targetPort) {
-    udp = UdpVibeD(ip, targetPort, port);
+  this(string ip, ushort port, ushort targetPort, bool loopback = true) {
+    udp = UdpVibeD(ip, port, targetPort, loopback);
     getBuffer(2500);
   }
   void close() {
@@ -114,7 +66,7 @@ class Transport {
   void send(T)(T msg) {
     import vibe.core.log;
     writeMessage(msg, outBuffer);
-    logInfo("Sending: %s (%s bytes)", msg, outBuffer.data.length);
+    //logInfo("Sending: %s (%s bytes)", msg, outBuffer.data.length);
     udp.send(outBuffer.data);
     outBuffer.clear();
   }
@@ -131,7 +83,6 @@ class Transport {
       auto buf = udp.receive(getBuffer(2500));
       auto header = readHeader(buf);
       // TODO: Handle message fragmentation
-      logInfo("Received Header: %s", header);
       processMessage(header, buf, dispatcher);
     } catch (Exception e) {
       //logInfo("Failed to receive: %s", e);
@@ -205,7 +156,7 @@ struct Dispatcher {
   void processMessage(Message)(Message msg) {
     foreach(MsgType; MessageTypes) {
       static if (is(Message : MsgType)) {
-        static if (hasMember!(typeof(this),"audio")) {
+        static if (hasMember!(typeof(this),DelegatesField!MsgType)) {
           mixin("alias delegates = "~DelegatesField!MsgType~";");
           foreach(del; delegates)
             del(msg);

@@ -13,12 +13,20 @@ import std.algorithm : findSplit, map, find;
 import std.array : array;
 import std.range : empty, front;
 
+import vibe.core.log;
+
 struct DeviceInfo
 {
   Id id;
   string name;
   PortInfo[] ports;
   ConnectionInfo[] connections;
+}
+
+auto getOrNull(T)(T range) {
+  if (range.empty)
+    return null;
+  return range.front;
 }
 
 class Device {
@@ -47,51 +55,96 @@ class Device {
                       connections.map!"a.getInfo".array
                       );
   }
-  private void killConnection(Range)(Range range) {
+  private bool killConnection(Range)(Range range) {
     import std.algorithm : remove;
     if (range.empty)
-      return;
+      return false;
     auto connection = range.front();
     connection.kill();
     connections = connections.remove!(c => c is connection);
+    return true;
   }
   private Port getPort(Id id) {
-    return null;
+    return ports.find!(p => p.id == id).getOrNull;
   }
   void onMessage(ref PingMessage msg) {
     transport.send(PongMessage(msg.nonce, id));
   }
-  void onMessage(ref JoinMessage msg) {}
-  void onMessage(ref PongMessage msg) {}
-  void onMessage(ref LeaveMessage msg) {}
   void onMessage(ref QueryMessage msg) {
     transport.send(InfoMessage(msg.nonce,getDeviceInfo()));
   }
-  void onMessage(ref InfoMessage msg) {}
   void onMessage(ref LinkCommandMessage msg) {
     auto source = getPort(msg.source);
     auto target = getPort(msg.target);
     if (source is null && target is null)
       return;
     if (source !is null && target !is null) {
-      transport.send(LinkReplyMessage(msg.nonce, id, LinkStatus.Error, "Source and target cannot be on same device"));
+      transport.send(LinkReplyMessage(msg.nonce, id, ConnectionInfo.init, LinkStatus.Error, "Source and target cannot be on same device"));
       return;
     }
     killConnection(connections.find!(c => c.port is source || c.port is target));
+    Connection connection;
     if (source !is null) {
-      connections ~= new OutgoingConnection(msg.connection, source, msg.target, msg.host, msg.port);
+      connection = new OutgoingConnection(msg.connection, source, msg.target, msg.host, msg.port);
     } else if (target !is null) {
-      connections ~= new IncomingConnection(msg.connection, target, msg.source, msg.host, msg.port);
+      connection = new IncomingConnection(msg.connection, target, msg.source, msg.host, msg.port);
     }
-    transport.send(LinkReplyMessage(msg.nonce, id, LinkStatus.Active, ""));
+    connections ~= connection;
+    transport.send(LinkReplyMessage(msg.nonce, id, connection.getInfo, LinkStatus.Active, ""));
   }
-  void onMessage(ref LinkReplyMessage msg) {}
   void onMessage(ref UnlinkMessage msg) {
-    killConnection(connections.find!(c => c.id == msg.connection));
+    auto connectionRange = connections.find!(c => c.id == msg.connection);
+    if (connectionRange.empty)
+      return;
+    killConnection(connectionRange);
+
+    auto connection = connectionRange.front();
+    transport.send(LinkReplyMessage(msg.nonce, id, connection.getInfo, LinkStatus.Dead, ""));
   }
   void close() {
     foreach(c; connections)
       c.kill();
     connections = [];
+    transport.send(LeaveMessage(id));
+  }
+}
+
+class DeviceList {
+  private Transport transport;
+  private DeviceInfo[Id] devices;
+  this(Transport transport) {
+    this.transport = transport;
+    transport.connect(this);
+  }
+  const(DeviceInfo[]) getDevices() {
+    return devices.values;
+  }
+  void sync() {
+    transport.send(QueryMessage());
+  }
+  void onMessage(ref JoinMessage msg) {
+    devices[msg.device.id] = msg.device.dup();
+  }
+  void onMessage(ref InfoMessage msg) {
+    devices[msg.device.id] = msg.device.dup();
+  }
+  void onMessage(ref LeaveMessage msg) {
+    devices.remove(msg.deviceId);
+  }
+  void onMessage(ref LinkReplyMessage msg) {
+    import std.algorithm : countUntil, remove;
+    if (auto stored = msg.self in devices)
+    {
+      if (msg.status == LinkStatus.Active)
+      {
+        auto idx = (*stored).connections.countUntil!(c => msg.connection.id == c.id);
+        if (idx == -1)
+        {
+          (*stored).connections ~= msg.connection;
+        } else
+          (*stored).connections[idx] = msg.connection;
+      } else
+        (*stored).connections = (*stored).connections.remove!(c => msg.connection.id == c.id);
+    }
   }
 }

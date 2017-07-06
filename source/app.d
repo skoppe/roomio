@@ -8,7 +8,9 @@ import std.getopt;
 import vibe.core.core;
 import vibe.core.args;
 import vibe.core.log;
+import roomio.cli;
   import std.stdio;
+  import std.socket : Socket;
 
 
 int main(string[] args){
@@ -32,26 +34,28 @@ int main(string[] args){
 
   bool running = true;
   auto task = runTask({
-      transport = new Transport(ip, port, 54544);
-      auto logger = new MessageLogger();
-      device = new Device(Id.random, "device", transport, ports);
-
-      transport.connect(logger);
-      device.connect();
+      transport = new Transport(ip, port, 54544, true);
       logInfo("Connected");
+      device = new Device(Id.random, Socket.hostName(), transport, ports);
+
+      auto deviceList = new DeviceList(transport);
+      deviceList.sync();
+      startCli(transport, deviceList);
+
+      device.connect();
       while(running) {
         transport.acceptMessage();
       }
   });
 
+
   runEventLoop();
 
-  // Solve proper shutdown....
   running = false;
   task.join();
   device.close();
+  logInfo("Closing connection");
   transport.close();
-  //logInfo("Closing connection");
   //transport.close();
 
   return 0;

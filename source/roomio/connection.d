@@ -4,6 +4,8 @@ import roomio.id;
 import roomio.port;
 import roomio.transport;
 
+import vibe.core.log;
+
 enum Direction {
   In,
   Out
@@ -48,8 +50,9 @@ class OutgoingConnection : Connection {
   private Transport transport;
   this(Id id, Port port, Id other, string host, ushort hostport) {
     super(id, port, other, Direction.Out, host, hostport);
+    logInfo("Opening outgoing connection %s to %s : %s", port.name, host, hostport);
     assert(port.type == PortType.Input);
-    transport = new Transport(host, hostport, hostport);
+    transport = new Transport(host, hostport, hostport, false);
     port.start(transport);
   }
 }
@@ -58,8 +61,9 @@ class IncomingConnection : Connection {
   private Transport transport;
   this(Id id, Port port, Id other, string host, ushort hostport) {
     super(id, port, other, Direction.In, host, hostport);
+    logInfo("Opening incoming connection %s from %s : %s", port.name, host, hostport);
     assert(port.type == PortType.Output);
-    transport = new Transport(host, hostport, hostport);
+    transport = new Transport(host, hostport, hostport, false);
     port.start(transport);
   }
 }

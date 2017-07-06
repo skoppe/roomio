@@ -23,6 +23,12 @@ struct Id {
   this(string u) {
     _raw = parseUUID(u).data;
   }
+  string toString() const {
+    import std.digest.digest : toHexString;
+    import std.conv : text;
+    import std.ascii : LetterCase;
+    return _raw.toHexString!(LetterCase.lower).text;
+  }
   const(ubyte[16]) raw() @nogc { return _raw; }
   bool opEquals(const Id other) @nogc const {
     return this._raw == other._raw;
@@ -30,10 +36,15 @@ struct Id {
   void accept(C)(auto ref C cereal) {
     cereal.grain(_raw);
   }
+  size_t toHash() const nothrow @trusted {
+    return *(cast(const(size_t*))_raw.ptr);
+  }
 }
 
 unittest {
   auto id = Id("01234567-0123-0123-0123-0123456789ab");
   auto raw = id.cerealise;
   raw.decerealize!Id.shouldEqual(id);
+
+  id.toString().shouldEqual("012345670123012301230123456789ab");
 }

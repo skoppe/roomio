@@ -1,6 +1,7 @@
 module roomio.messages;
 
 import roomio.device;
+import roomio.connection;
 import roomio.id;
 import cerealed;
 import roomio.testhelpers;
@@ -69,11 +70,13 @@ enum LinkStatus {
 struct LinkReplyMessage {
   ubyte[20] replyTo;
   Id self;
+  ConnectionInfo connection;
   LinkStatus status;
   string msg;
 }
 
 struct UnlinkMessage {
+  ubyte[20] nonce;
   Id connection;
 }
 
@@ -120,6 +123,27 @@ size_t messageSize(T)(T msg) {
   return s;
 }
 
+auto dup(T)(ref T msg) if (!is(T : P[], P)) {
+  import std.traits : hasMember;
+  enum members = __traits(allMembers, T);
+  foreach(M; members) {
+    alias MT = typeof(__traits(getMember, T, M));
+    static if (!hasMember!(MT, "accept")) {
+      static if (is(MT : P[], P)) {
+        __traits(getMember, msg, M) = object.dup(__traits(getMember, msg, M));
+        static if (__traits(isPOD, P) && !__traits(isScalar, P)) {
+          foreach(idx, item; __traits(getMember, msg, M)) {
+            __traits(getMember, msg, M)[idx] = item.dup();
+          }
+        }
+      }
+      else static if (__traits(isPOD, MT) && !__traits(isScalar, MT))
+        __traits(getMember, msg, M).dup;
+    }
+  }
+  return msg;
+}
+
 unittest {
   import roomio.port;
   import roomio.connection;
@@ -129,8 +153,8 @@ unittest {
   PortInfo port = PortInfo(Id.random, PortType.Input, "name", 10, 20);
   ConnectionInfo connection = ConnectionInfo(Id.random, Id.random, Id.random, Direction.In);
   DeviceInfo device = DeviceInfo(Id.random, "device", [port, port], [connection, connection] );
-  assertMessageSize(LinkReplyMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.random, LinkStatus.Active, "message"));
-  assertMessageSize(UnlinkMessage(Id.random));
+  assertMessageSize(LinkReplyMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.random, connection, LinkStatus.Active, "message"));
+  assertMessageSize(UnlinkMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], connection.id));
   assertMessageSize(LinkCommandMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.random, Id.random, Id.random));
   assertMessageSize(InfoMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], device));
   assertMessageSize(QueryMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9]));
@@ -170,8 +194,8 @@ unittest {
   PortInfo port = PortInfo(Id.test, PortType.Input, "name", 10, 20);
   ConnectionInfo connection = ConnectionInfo(Id.test, Id.test, Id.test, Direction.In);
   DeviceInfo device = DeviceInfo(Id.test, "device", [port, port], [connection, connection] );
-  serialize(LinkReplyMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test, LinkStatus.Active, "message")).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 49, 0, 0, 0, 5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 0, 0, 0, 0, 0, 7, 109, 101, 115, 115, 97, 103, 101]);
-  serialize(UnlinkMessage(Id.test)).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 6, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171]);
+  serialize(LinkReplyMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test, connection, LinkStatus.Active, "message")).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 49, 0, 0, 0, 5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 0, 0, 0, 0, 0, 7, 109, 101, 115, 115, 97, 103, 101]);
+  serialize(UnlinkMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test)).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 6, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171]);
   serialize(LinkCommandMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test, Id.test, Id.test)).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 72, 0, 0, 0, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 0, 0, 0, 0]);
   serialize(InfoMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], device)).shouldEqual([1, 0, 0, 0, 0, 0, 0, 0, 228, 0, 0, 0, 3, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137,
  171, 0, 6, 100, 101, 118, 105, 99, 101, 0, 2, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171, 0, 0, 0, 1, 0, 4, 110, 97, 109, 101, 0, 0, 0, 10, 0, 0, 0, 20, 1, 35, 69, 103, 1, 35, 1, 35, 1
@@ -191,10 +215,34 @@ T readMessage(T)(const ubyte[] raw) {
   enum headerSize = messageSize(Header.init);
   return raw[headerSize..$].decerealize!T;
 }
+
 unittest {
   ubyte[] raw = [1, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0, 6, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171];
   auto hdr = raw.readHeader();
   hdr.shouldEqual(Header(1,26,MessageType.Unlink));
   auto msg = raw.readMessage!(UnlinkMessage);
-  msg.shouldEqual(UnlinkMessage(Id.test));
+  msg.shouldEqual(UnlinkMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test));
+}
+
+@("dup")
+unittest {
+  import roomio.port;
+
+  PortInfo port = PortInfo(Id.test, PortType.Input, "port", 10, 20);
+  DeviceInfo device = DeviceInfo(Id.test, "device", [port] );
+  auto app = appender!(ubyte[]);
+  writeMessage(JoinMessage(device), app);
+  auto raw = app.data;
+  auto join1 = app.data.readMessage!(JoinMessage);
+  join1.device.name.shouldEqual("device");
+  join1.device.ports[0].name.shouldEqual("port");
+
+  join1.dup();
+  port = PortInfo(Id.test, PortType.Input, "second", 10, 20);
+  device = DeviceInfo(Id.test, "second", [port] );
+  app.clear();
+  writeMessage(JoinMessage(device), app);
+
+  join1.device.name.shouldEqual("device");
+  join1.device.ports[0].name.shouldEqual("port");
 }

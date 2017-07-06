@@ -6,6 +6,7 @@ license "proprietary"
 dependency "cerealed" version="~>0.6.8"
 dependency "vibe-d" path="../vibe.d/"
 dependency "portaudio" version="==1.0.0"
+dependency "d-option" version="==0.0.7"
 
 configuration "executable" {
   mainSourceFile "source/app.d"
