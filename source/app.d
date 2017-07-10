@@ -48,7 +48,6 @@ int main(string[] args){
       }
   });
 
-
   runEventLoop();
 
   running = false;
@@ -56,7 +55,6 @@ int main(string[] args){
   device.close();
   logInfo("Closing connection");
   transport.close();
-  //transport.close();
 
   return 0;
 }

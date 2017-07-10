@@ -59,9 +59,8 @@ void listDevices(ref CliState state) {
 		}
 		logInfo("\tConnections:");
 		foreach(connection; device.connections) {
-			auto source = getPortDevice(connection.source).mapOpt!(t => format("%s:%s", t.device.name ~ t.port.name)).getOrElse(connection.source.toString);
-			auto target = getPortDevice(connection.target).mapOpt!(t => format("%s:%s", t.device.name ~ t.port.name)).getOrElse(connection.target.toString);
-			if (source.empty)
+			auto source = getPortDevice(connection.source).mapOpt!(t => format("%s:%s", t.device.name, t.port.name)).getOrElse(connection.source.toString);
+			auto target = getPortDevice(connection.target).mapOpt!(t => format("%s:%s", t.device.name, t.port.name)).getOrElse(connection.target.toString);
 			logInfo("\t\t%s -> %s at %s : %s", source, target, connection.host, connection.port);
 		}
 	}
