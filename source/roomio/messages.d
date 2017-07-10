@@ -216,6 +216,11 @@ T readMessage(T)(const ubyte[] raw) {
   return raw[headerSize..$].decerealize!T;
 }
 
+T readMessageInPlace(T)(const ubyte[] raw, ref T val) {
+  Decerealiser(raw).read(val);
+  return val;
+}
+
 unittest {
   ubyte[] raw = [1, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0, 6, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171];
   auto hdr = raw.readHeader();

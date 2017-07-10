@@ -105,11 +105,12 @@ class OutputPort : Port
 			latency = Pa_GetStreamInfo(stream).outputLatency;
 		}
 		tid = runTask({
+			AudioMessage audio;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
-						auto audio = readMessage!(AudioMessage)(raw.data);
+						readMessageInPlace(raw.data, audio);
 						Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
 						break;
 					default: break;
