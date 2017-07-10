@@ -216,17 +216,32 @@ T readMessage(T)(const ubyte[] raw) {
   return raw[headerSize..$].decerealize!T;
 }
 
-T readMessageInPlace(T)(const ubyte[] raw, ref T val) {
-  Decerealiser(raw).read(val);
-  return val;
-}
-
+@("readMessage")
 unittest {
   ubyte[] raw = [1, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0, 6, 1, 35, 69, 103, 1, 35, 1, 35, 1, 35, 1, 35, 69, 103, 137, 171];
   auto hdr = raw.readHeader();
   hdr.shouldEqual(Header(1,26,MessageType.Unlink));
   auto msg = raw.readMessage!(UnlinkMessage);
   msg.shouldEqual(UnlinkMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], Id.test));
+}
+
+T readMessageInPlace(T)(const ubyte[] raw, ref T val) {
+  enum headerSize = messageSize(Header.init);
+  Decerealiser(raw[headerSize..$]).read(val);
+  return val;
+}
+
+@("readMessageInPlace")
+unittest {
+  import roomio.port;
+
+  auto app = appender!(ubyte[]);
+  writeMessage(AudioMessage([5,6,7,8,9], 55), app);
+
+  auto raw = app.data;
+  AudioMessage am;
+  app.data.readMessageInPlace(am);
+  am.buffer.shouldEqual([5,6,7,8,9]);
 }
 
 @("dup")
