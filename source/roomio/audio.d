@@ -137,7 +137,7 @@ class OutputPort : Port
 							{
 								auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
 								totalOutOfSync += hnsecOutOfSync;
-								logInfo("Out of buffer for %s hnsec (total %sms)", hnsecOutOfSync, totalOutOfSync / 10000);
+								logInfo("Out of buffer for %s hnsec (total %sms) (strm elpsd %s, aio elpsd %s)", hnsecOutOfSync, totalOutOfSync / 10000, hnsecStreamElapsed, hnsecAudioElapsed);
 							}
 						} else
 						{
@@ -147,9 +147,9 @@ class OutputPort : Port
 							//sleep(initialDelay.hnsecs);
 							//now = Clock.currStdTime();
 						}
+						lastWrite = now;
 						lastSampleSize = cast(long)(audio.buffer.length / this.channels);
 						Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
-						lastWrite = now;
 						break;
 					default: break;
 				}
