@@ -12,6 +12,8 @@ import deimos.portaudio;
 import std.string;
 import core.stdc.config;
 import std.stdio;
+import core.time : hnsecs;
+import std.datetime : Clock;
 
 import roomio.testhelpers;
 
@@ -106,11 +108,35 @@ class OutputPort : Port
 		}
 		tid = runTask({
 			AudioMessage audio;
+			long lastWrite;
+			long lastSampleSize;
+			long totalOutOfSync;
+			double hnsecPerSample = 10_000_000 / samplerate;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
 						readMessageInPlace(raw.data, audio);
+						long now = Clock.currStdTime();
+						if (lastWrite != 0) {
+							auto hnsecStreamElapsed = (now - lastWrite);
+							auto hnsecAudioElapsed = cast(ulong)(lastSampleSize * hnsecPerSample);
+							if (hnsecStreamElapsed > hnsecAudioElapsed)
+							{
+								auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
+								totalOutOfSync += hnsecOutOfSync;
+								logInfo("Out of buffer for %s hnsec (total %ms)", hnsecOutOfSync, totalOutOfSync / 10000);
+							}
+						} else
+						{
+							//long initialDelay = cast(long)(((audio.buffer.length >> 1) / this.channels) * hnsecPerSample);
+							//// sleep for half buffer length (to account for variation is UDP stream)
+							//logInfo("Delay stream for %s hnsecs (%s single channel samples)", initialDelay, (audio.buffer.length >> 1) / this.channels);
+							//sleep(initialDelay.hnsecs);
+							//now = Clock.currStdTime();
+						}
+						lastWrite = now;
+						lastSampleSize = cast(long)(audio.buffer.length / this.channels);
 						Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
 						break;
 					default: break;
