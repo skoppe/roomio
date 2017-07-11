@@ -126,7 +126,7 @@ class OutputPort : Port
 							samplesSkipped += audio.samplesCounter - samplesPlayed;
 							totalOutOfSync -= cast(long)(samplesSkipped * hnsecPerSample);
 							logInfo("Skipped %s samples", audio.samplesCounter - samplesPlayed);
-							samplesPlayed = samplesCounter;
+							samplesPlayed = audio.samplesCounter;
 						} else
 							samplesPlayed += audio.buffer.length;
 						long now = Clock.currStdTime();
