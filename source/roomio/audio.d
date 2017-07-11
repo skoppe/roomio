@@ -100,7 +100,7 @@ class OutputPort : Port
 	{
 		auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 		auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
-		auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, paFramesPerBufferUnspecified, 0, null, null );
+		auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, null, null );
 		if (result != paNoError) {
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
