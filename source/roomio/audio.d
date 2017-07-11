@@ -53,9 +53,11 @@ class InputPort : Port
 			latency = Pa_GetStreamInfo(stream).inputLatency;
 			tid = runTask({
 				short[64] buffer;
+				long samplesCounter;
 				while(running) {
 					Pa_ReadStream(stream, buffer[].ptr, 64);
-					transport.send(AudioMessage(buffer[], 0));
+					transport.send(AudioMessage(buffer[], 0, samplesCounter));
+					samplesCounter += 64;
 					yield();
 				}
 				Pa_CloseStream(this.stream);
@@ -111,16 +113,26 @@ class OutputPort : Port
 			long lastWrite;
 			long lastSampleSize;
 			long totalOutOfSync;
+			long samplesPlayed;
+			long samplesSkipped;
 			double hnsecPerSample = 10_000_000 / samplerate;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
 						readMessageInPlace(raw.data, audio);
+						if (samplesPlayed < audio.samplesCounter)
+						{
+							samplesSkipped += audio.samplesCounter - samplesPlayed;
+							totalOutOfSync -= cast(long)(samplesSkipped * hnsecPerSample);
+							logInfo("Skipped %s samples", audio.samplesCounter - samplesPlayed);
+							samplesPlayed = samplesCounter;
+						} else
+							samplesPlayed += audio.buffer.length;
 						long now = Clock.currStdTime();
 						if (lastWrite != 0) {
 							auto hnsecStreamElapsed = (now - lastWrite);
-							auto hnsecAudioElapsed = cast(ulong)(lastSampleSize * hnsecPerSample);
+							auto hnsecAudioElapsed = cast(long)(lastSampleSize * hnsecPerSample);
 							if (hnsecStreamElapsed > hnsecAudioElapsed)
 							{
 								auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
@@ -130,14 +142,14 @@ class OutputPort : Port
 						} else
 						{
 							//long initialDelay = cast(long)(((audio.buffer.length >> 1) / this.channels) * hnsecPerSample);
-							//// sleep for half buffer length (to account for variation is UDP stream)
+							//// sleep for half buffer length (to account for variation in UDP stream)
 							//logInfo("Delay stream for %s hnsecs (%s single channel samples)", initialDelay, (audio.buffer.length >> 1) / this.channels);
 							//sleep(initialDelay.hnsecs);
 							//now = Clock.currStdTime();
 						}
-						lastWrite = now;
 						lastSampleSize = cast(long)(audio.buffer.length / this.channels);
 						Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
+						lastWrite = now;
 						break;
 					default: break;
 				}

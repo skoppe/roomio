@@ -83,6 +83,7 @@ struct UnlinkMessage {
 struct AudioMessage {
   short[] buffer;
   size_t masterTime;
+  long samplesCounter;
 }
 
 auto readHeader(ubyte[] raw) {
@@ -236,7 +237,7 @@ unittest {
   import roomio.port;
 
   auto app = appender!(ubyte[]);
-  writeMessage(AudioMessage([5,6,7,8,9], 55), app);
+  writeMessage(AudioMessage([5,6,7,8,9], 55, 66), app);
 
   auto raw = app.data;
   AudioMessage am;
