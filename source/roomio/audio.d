@@ -125,7 +125,7 @@ class OutputPort : Port
 							{
 								auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
 								totalOutOfSync += hnsecOutOfSync;
-								logInfo("Out of buffer for %s hnsec (total %ms)", hnsecOutOfSync, totalOutOfSync / 10000);
+								logInfo("Out of buffer for %s hnsec (total %sms)", hnsecOutOfSync, totalOutOfSync / 10000);
 							}
 						} else
 						{
