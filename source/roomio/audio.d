@@ -4,6 +4,7 @@ import roomio.port;
 import roomio.id;
 import roomio.transport;
 import roomio.messages;
+import roomio.queue;
 
 import vibe.core.core;
 import vibe.core.log;
@@ -89,67 +90,103 @@ class OutputPort : Port
 		PaDeviceIndex idx;
 		PaTime latency;
 		Task tid;
-		uint sampleDelay;
+		uint msDelay;
+		CircularQueue!(AudioMessage, 6) queue;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 2) {
-		//this.sampleDelay = (samplerate / 1000) * channels * msDelay;
 		this.idx = idx;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
 	override void start(Transport transport)
 	{
+		// TODO: need to notify sample size from source to target
+
+		extern(C) static int callback(const(void)* inputBuffer, void* outputBuffer,
+		                             size_t framesPerBuffer,
+		                             const(PaStreamCallbackTimeInfo)* timeInfo,
+		                             PaStreamCallbackFlags statusFlags,
+		                             void *userData) {
+			OutputPort port = cast(OutputPort)(userData);
+			if (port.queue.empty) {
+				logInfo("Queue Empty!");
+				return paContinue;
+			}
+			port.queue.pop((ref AudioMessage m){
+				assert(m.buffer.length == framesPerBuffer);
+				short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
+				output[] = m.buffer[];
+			});
+
+			return paContinue;
+		}
+
 		auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 		auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
-		auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, null, null );
+		auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
 		if (result != paNoError) {
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
 		{
-			Pa_StartStream(stream);
 			latency = Pa_GetStreamInfo(stream).outputLatency;
 		}
+
 		tid = runTask({
-			AudioMessage audio;
-			long lastWrite;
-			long lastSampleSize;
-			long totalOutOfSync;
-			long samplesPlayed;
-			long samplesSkipped;
-			double hnsecPerSample = 10_000_000 / samplerate;
+			//AudioMessage audio;
+			//long lastWrite;
+			//long lastSampleSize;
+			//long totalOutOfSync;
+			//long samplesPlayed;
+			//long samplesSkipped;
+			//double hnsecPerSample = 10_000_000 / samplerate;
+			bool started = false;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
-						readMessageInPlace(raw.data, audio);
-						if (samplesPlayed < audio.samplesCounter)
-						{
-							samplesSkipped += audio.samplesCounter - samplesPlayed;
-							totalOutOfSync -= cast(long)(samplesSkipped * hnsecPerSample);
-							logInfo("Skipped %s samples", audio.samplesCounter - samplesPlayed);
-							samplesPlayed = audio.samplesCounter;
-						} else
-							samplesPlayed += audio.buffer.length;
-						long now = Clock.currStdTime();
-						if (lastWrite != 0) {
-							auto hnsecStreamElapsed = (now - lastWrite);
-							auto hnsecAudioElapsed = cast(long)(lastSampleSize * hnsecPerSample);
-							if (hnsecStreamElapsed > hnsecAudioElapsed)
-							{
-								auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
-								totalOutOfSync += hnsecOutOfSync;
-								logInfo("Out of buffer for %s hnsec (total %sms) (strm elpsd %s, aio elpsd %s)", hnsecOutOfSync, totalOutOfSync / 10000, hnsecStreamElapsed, hnsecAudioElapsed);
-							}
-						} else
-						{
-							//long initialDelay = cast(long)(((audio.buffer.length >> 1) / this.channels) * hnsecPerSample);
-							//// sleep for half buffer length (to account for variation in UDP stream)
-							//logInfo("Delay stream for %s hnsecs (%s single channel samples)", initialDelay, (audio.buffer.length >> 1) / this.channels);
-							//sleep(initialDelay.hnsecs);
-							//now = Clock.currStdTime();
+						if (queue.full) {
+							logInfo("Queue Full!");
+							continue;
 						}
-						lastWrite = now;
-						lastSampleSize = cast(long)(audio.buffer.length / this.channels);
-						Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
+						queue.push((ref AudioMessage audio){
+							readMessageInPlace(raw.data, audio);
+						});
+						if (!started)
+						{
+							started = true;
+							runTask({
+								sleep(msDelay.msecs);
+								Pa_StartStream(stream);
+							});
+						}
+						//if (samplesPlayed < audio.samplesCounter)
+						//{
+						//	samplesSkipped += audio.samplesCounter - samplesPlayed;
+						//	totalOutOfSync -= cast(long)(samplesSkipped * hnsecPerSample);
+						//	logInfo("Skipped %s samples", audio.samplesCounter - samplesPlayed);
+						//	samplesPlayed = audio.samplesCounter;
+						//} else
+						//	samplesPlayed += audio.buffer.length;
+						//long now = Clock.currStdTime();
+						//if (lastWrite != 0) {
+						//	auto hnsecStreamElapsed = (now - lastWrite);
+						//	auto hnsecAudioElapsed = cast(long)(lastSampleSize * hnsecPerSample);
+						//	if (hnsecStreamElapsed > hnsecAudioElapsed)
+						//	{
+						//		auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
+						//		totalOutOfSync += hnsecOutOfSync;
+						//		logInfo("Out of buffer for %s hnsec (total %sms) (strm elpsd %s, aio elpsd %s)", hnsecOutOfSync, totalOutOfSync / 10000, hnsecStreamElapsed, hnsecAudioElapsed);
+						//	}
+						//} else
+						//{
+						//	//long initialDelay = cast(long)(((audio.buffer.length >> 1) / this.channels) * hnsecPerSample);
+						//	//// sleep for half buffer length (to account for variation in UDP stream)
+						//	//logInfo("Delay stream for %s hnsecs (%s single channel samples)", initialDelay, (audio.buffer.length >> 1) / this.channels);
+						//	//sleep(initialDelay.hnsecs);
+						//	//now = Clock.currStdTime();
+						//}
+						//lastWrite = now;
+						//lastSampleSize = cast(long)(audio.buffer.length / this.channels);
+						//Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
 						break;
 					default: break;
 				}
