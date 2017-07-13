@@ -18,14 +18,12 @@ struct CircularQueue(Element, size_t Size) {
     assert(!empty);
     fun(data[head]);
     atomicStore(head,incr(head));
-    writefln("Pop: Head %s, Tail %s", head, tail);
   }
 
   void push(void delegate (ref Element) fun) {
     assert(!full);
     fun(data[tail]);
     atomicStore(tail,incr(tail));
-    writefln("Push: Head %s, Tail %s", head, tail);
   }
 
   bool empty() pure const { return tail == head; }
