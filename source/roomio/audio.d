@@ -91,10 +91,11 @@ class OutputPort : Port
 		PaTime latency;
 		Task tid;
 		uint msDelay;
-		CircularQueue!(AudioMessage, 6) queue;
+		CircularQueue!(AudioMessage, 48) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 3) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
 		this.idx = idx;
+		this.msDelay = msDelay;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
 	override void start(Transport transport)
@@ -108,7 +109,6 @@ class OutputPort : Port
 		                             void *userData) {
 			OutputPort port = cast(OutputPort)(userData);
 			if (port.queue.empty) {
-				logInfo("Queue Empty!");
 				return paContinue;
 			}
 			port.queue.pop((ref AudioMessage m){
@@ -137,8 +137,11 @@ class OutputPort : Port
 				switch (raw.header.type) {
 					case MessageType.Audio:
 						if (queue.full) {
-							logInfo("Queue Full!");
+							logInfo("Queue full!");
 							continue;
+						}
+						if (queue.empty) {
+							logInfo("Queue empty!");
 						}
 						queue.push((ref AudioMessage audio){
 							readMessageInPlace(raw.data, audio);

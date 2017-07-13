@@ -18,16 +18,23 @@ struct CircularQueue(Element, size_t Size) {
     assert(!empty);
     fun(data[head]);
     atomicStore(head,incr(head));
+    writefln("Pop: Head %s, Tail %s", head, tail);
   }
 
   void push(void delegate (ref Element) fun) {
     assert(!full);
     fun(data[tail]);
     atomicStore(tail,incr(tail));
+    writefln("Push: Head %s, Tail %s", head, tail);
   }
 
   bool empty() pure const { return tail == head; }
   bool full() pure const { return incr(tail) == head; }
+  size_t length() pure const {
+    if (tail < head)
+      return tail + Size - head;
+    return tail - head;
+  }
 }
 
 @("CircularQueue")
@@ -44,9 +51,12 @@ unittest {
   queue.empty.shouldBeTrue;
   queue.full.shouldBeFalse;
 
-  foreach(idx; 0..5)
+  foreach(idx; 0..5) {
     queue.push((ref int i){ i = 1; });
-  queue.empty.shouldBeFalse;
+    queue.empty.shouldBeFalse;
+    if (idx < 4)
+      queue.full.shouldBeFalse;
+  }
   queue.full.shouldBeTrue;
 
   queue.pop((ref int i){ i = 1; });
@@ -57,9 +67,12 @@ unittest {
   queue.empty.shouldBeFalse;
   queue.full.shouldBeTrue;
 
-  foreach(idx; 0..5)
+  foreach(idx; 0..5) {
     queue.pop((ref int i){ i = 1; });
+    queue.full.shouldBeFalse;
+    if (idx < 4)
+      queue.empty.shouldBeFalse;
+  }
   queue.empty.shouldBeTrue;
-  queue.full.shouldBeFalse;
 
 }
