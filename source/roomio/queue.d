@@ -14,15 +14,15 @@ struct CircularQueue(Element, size_t Size) {
     }
   }
 
-  void pop(void delegate (ref Element) fun) {
+  void pop(Args...)(void function (ref Element, Args) @nogc fun, Args args) @nogc {
     assert(!empty);
-    fun(data[head]);
+    fun(data[head], args);
     atomicStore(head,incr(head));
   }
 
-  void push(void delegate (ref Element) fun) {
+  void push(Args...)(void function (ref Element, Args) fun, Args args) {
     assert(!full);
-    fun(data[tail]);
+    fun(data[tail],args);
     atomicStore(tail,incr(tail));
   }
 

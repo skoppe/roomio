@@ -106,16 +106,16 @@ class OutputPort : Port
 		                             size_t framesPerBuffer,
 		                             const(PaStreamCallbackTimeInfo)* timeInfo,
 		                             PaStreamCallbackFlags statusFlags,
-		                             void *userData) {
+		                             void *userData) @nogc {
 			OutputPort port = cast(OutputPort)(userData);
 			if (port.queue.empty) {
 				return paContinue;
 			}
-			port.queue.pop((ref AudioMessage m){
+			port.queue.pop!(size_t, void*)((ref AudioMessage m, size_t framesPerBuffer, void* outputBuffer){
 				assert(m.buffer.length == framesPerBuffer);
 				short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 				output[] = m.buffer[];
-			});
+			}, framesPerBuffer, outputBuffer);
 
 			return paContinue;
 		}
@@ -143,9 +143,10 @@ class OutputPort : Port
 						if (queue.empty) {
 							logInfo("Queue empty!");
 						}
-						queue.push((ref AudioMessage audio){
-							readMessageInPlace(raw.data, audio);
-						});
+						alias RawType = typeof(raw);
+						queue.push!(ubyte[])((ref AudioMessage audio, ubyte[] raw) {
+							readMessageInPlace(raw, audio);
+						}, raw.data);
 						if (!started)
 						{
 							started = true;
