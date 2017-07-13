@@ -1,5 +1,7 @@
 module roomio.queue;
 
+import roomio.testhelpers;
+
 import core.atomic;
 
 struct CircularQueue(Element, size_t Size) {
@@ -25,5 +27,39 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   bool empty() pure const { return tail == head; }
-  bool full() pure const { return incr(head) == tail; }
+  bool full() pure const { return incr(tail) == head; }
+}
+
+@("CircularQueue")
+unittest {
+  auto queue = CircularQueue!(int, 6)();
+  queue.empty.shouldBeTrue;
+  queue.full.shouldBeFalse;
+  
+  queue.push((ref int i){ i = 1; });
+  queue.empty.shouldBeFalse;
+  queue.full.shouldBeFalse;
+  
+  queue.pop((ref int i){ i = 1; });
+  queue.empty.shouldBeTrue;
+  queue.full.shouldBeFalse;
+
+  foreach(idx; 0..5)
+    queue.push((ref int i){ i = 1; });
+  queue.empty.shouldBeFalse;
+  queue.full.shouldBeTrue;
+
+  queue.pop((ref int i){ i = 1; });
+  queue.empty.shouldBeFalse;
+  queue.full.shouldBeFalse;
+
+  queue.push((ref int i){ i = 1; });
+  queue.empty.shouldBeFalse;
+  queue.full.shouldBeTrue;
+
+  foreach(idx; 0..5)
+    queue.pop((ref int i){ i = 1; });
+  queue.empty.shouldBeTrue;
+  queue.full.shouldBeFalse;
+
 }

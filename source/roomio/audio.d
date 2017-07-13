@@ -93,7 +93,7 @@ class OutputPort : Port
 		uint msDelay;
 		CircularQueue!(AudioMessage, 6) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 2) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 3) {
 		this.idx = idx;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
@@ -131,13 +131,6 @@ class OutputPort : Port
 		}
 
 		tid = runTask({
-			//AudioMessage audio;
-			//long lastWrite;
-			//long lastSampleSize;
-			//long totalOutOfSync;
-			//long samplesPlayed;
-			//long samplesSkipped;
-			//double hnsecPerSample = 10_000_000 / samplerate;
 			bool started = false;
 			while(1) {
 				auto raw = transport.acceptRaw();
@@ -158,35 +151,6 @@ class OutputPort : Port
 								Pa_StartStream(stream);
 							});
 						}
-						//if (samplesPlayed < audio.samplesCounter)
-						//{
-						//	samplesSkipped += audio.samplesCounter - samplesPlayed;
-						//	totalOutOfSync -= cast(long)(samplesSkipped * hnsecPerSample);
-						//	logInfo("Skipped %s samples", audio.samplesCounter - samplesPlayed);
-						//	samplesPlayed = audio.samplesCounter;
-						//} else
-						//	samplesPlayed += audio.buffer.length;
-						//long now = Clock.currStdTime();
-						//if (lastWrite != 0) {
-						//	auto hnsecStreamElapsed = (now - lastWrite);
-						//	auto hnsecAudioElapsed = cast(long)(lastSampleSize * hnsecPerSample);
-						//	if (hnsecStreamElapsed > hnsecAudioElapsed)
-						//	{
-						//		auto hnsecOutOfSync = hnsecStreamElapsed - hnsecAudioElapsed;
-						//		totalOutOfSync += hnsecOutOfSync;
-						//		logInfo("Out of buffer for %s hnsec (total %sms) (strm elpsd %s, aio elpsd %s)", hnsecOutOfSync, totalOutOfSync / 10000, hnsecStreamElapsed, hnsecAudioElapsed);
-						//	}
-						//} else
-						//{
-						//	//long initialDelay = cast(long)(((audio.buffer.length >> 1) / this.channels) * hnsecPerSample);
-						//	//// sleep for half buffer length (to account for variation in UDP stream)
-						//	//logInfo("Delay stream for %s hnsecs (%s single channel samples)", initialDelay, (audio.buffer.length >> 1) / this.channels);
-						//	//sleep(initialDelay.hnsecs);
-						//	//now = Clock.currStdTime();
-						//}
-						//lastWrite = now;
-						//lastSampleSize = cast(long)(audio.buffer.length / this.channels);
-						//Pa_WriteStream(stream, cast(void*)audio.buffer, audio.buffer.length);
 						break;
 					default: break;
 				}
