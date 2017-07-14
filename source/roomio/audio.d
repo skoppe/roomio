@@ -84,13 +84,13 @@ unittest {
 	calcSamplesDelay(1, 44100, 5, 64).shouldEqual(192);
 }
 
-void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref AudioMessage currentRead, short[] output, size_t hnsecDelay, size_t slaveTime, double hnsecPerSample) {
+void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, short[] output, size_t hnsecDelay, size_t slaveTime, double hnsecPerSample) {
 	size_t framesPerBuffer = output.length;
 	// there is only one path in the while loop that doesn't break
 	// that is the path where all samples in the current message can be discarded
 	while(true) {
 		// playTime is the time the first sample in the message should be played on
-		size_t playTime = currentRead.masterTime + hnsecDelay;
+		size_t playTime = queue.currentRead.masterTime + hnsecDelay;
 
 		// when the local time is behind the time the current audio message should be played
 		if (slaveTime < playTime) {
@@ -106,7 +106,7 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 				writeln("2) ", slaveTime, ", ", playTime, ", " ,silenceSamples);
 				// otherwise we fill ouput with partial silence and partial audio
 				output[0..silenceSamples] = 0;
-				output[silenceSamples..$] = currentRead.buffer[0..framesPerBuffer - silenceSamples];
+				output[silenceSamples..$] = queue.currentRead.buffer[0..framesPerBuffer - silenceSamples];
 			}
 			// and break the while loop
 			break;
@@ -115,7 +115,7 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 			// otherwise, we calculate how many samples in the current message can be discarded
 			size_t skipSamples = ((cast(double)(slaveTime - playTime)) / hnsecPerSample).to!size_t;
 			// when that is larger than the samples in the messages
-			if (skipSamples >= currentRead.buffer.length)
+			if (skipSamples >= queue.currentRead.buffer.length)
 			{
 				writeln("3) ", slaveTime, ", ", playTime, ", " ,skipSamples);
 				// we drop the message
@@ -131,15 +131,15 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 				writeln("4) ", slaveTime, ", ", playTime, ", " ,skipSamples);
 				// when the amount of samples to be skipped is smaller than the amount of samples in the current message
 				// we calculate how many samples are left in the audio message
-				size_t samplesCopied = currentRead.buffer.length - skipSamples;
+				size_t samplesCopied = queue.currentRead.buffer.length - skipSamples;
 				// and copy those
-				output[0..samplesCopied] = currentRead.buffer[skipSamples..$];
+				output[0..samplesCopied] = queue.currentRead.buffer[skipSamples..$];
 				// advance the queue
 				queue.advanceRead();
 				// and if the queue is not empty
 				if (!queue.empty) {
 					// we fill with the audio from the next message
-					output[samplesCopied..$] = currentRead.buffer[0..skipSamples];
+					output[samplesCopied..$] = queue.currentRead.buffer[0..skipSamples];
 				} else {
 					// otherwise we fill with silence
 					output[samplesCopied..$] = 0;
@@ -161,7 +161,7 @@ unittest {
 	size_t hnsecDelay = 500;
 	size_t slaveTime = 10_500;
 	double hnsecPerSample = 200;
-	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	copyBufferTimed(queue, output, hnsecDelay, slaveTime, hnsecPerSample);
 	output.shouldEqual([0,1,2,3,4,5]);
 
 	queue.currentWrite.buffer = [1,2,3,4,5,6];
@@ -169,7 +169,7 @@ unittest {
 	queue.advanceWrite();
 
 	slaveTime = 10_700;
-	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	copyBufferTimed(queue, output, hnsecDelay, slaveTime, hnsecPerSample);
 	output.shouldEqual([2,3,4,5,6,0]);
 
 	queue.currentWrite.buffer = [2,3,4,5,6,7];
@@ -177,10 +177,10 @@ unittest {
 	queue.advanceWrite();
 
 	slaveTime = 10_300;
-	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	copyBufferTimed(queue, output, hnsecDelay, slaveTime, hnsecPerSample);
 	output.shouldEqual([0,2,3,4,5,6]);
 	slaveTime = 10_300 + 1_200;
-	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	copyBufferTimed(queue, output, hnsecDelay, slaveTime, hnsecPerSample);
 	output.shouldEqual([7,0,0,0,0,0]);
 }
 
@@ -219,7 +219,7 @@ class OutputPort : Port
 			}
 			size_t slaveTime = Clock.currStdTime;
 
-			copyBufferTimed(port.queue, port.queue.currentRead, output, port.hnsecDelay, slaveTime, port.hnsecPerSample);
+			copyBufferTimed(port.queue, output, port.hnsecDelay, slaveTime, port.hnsecPerSample);
 
 			return paContinue;
 		}
