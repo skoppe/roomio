@@ -99,9 +99,11 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 			size_t silenceSamples = ((cast(double)(playTime - slaveTime)) / hnsecPerSample).to!size_t;
 			// when the amount of samples of silence is bigger than output buffer size
 			if (silenceSamples >= framesPerBuffer) {
+				writeln("1) ", slaveTime, ", ", playTime, ", " ,silenceSamples);
 				// we fill everything with silence
 				output[0..framesPerBuffer] = 0;
 			} else {
+				writeln("2) ", slaveTime, ", ", playTime, ", " ,silenceSamples);
 				// otherwise we fill ouput with partial silence and partial audio
 				output[0..silenceSamples] = 0;
 				output[silenceSamples..$] = currentRead.buffer[0..framesPerBuffer - silenceSamples];
@@ -115,6 +117,7 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 			// when that is larger than the samples in the messages
 			if (skipSamples >= currentRead.buffer.length)
 			{
+				writeln("3) ", slaveTime, ", ", playTime, ", " ,skipSamples);
 				// we drop the message
 				queue.advanceRead();
 				// we check if the queue is empty
@@ -125,6 +128,7 @@ void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref Au
 				}
 				// if the queue isn't empty we continue the while loop
 			} else {
+				writeln("4) ", slaveTime, ", ", playTime, ", " ,skipSamples);
 				// when the amount of samples to be skipped is smaller than the amount of samples in the current message
 				// we calculate how many samples are left in the audio message
 				size_t samplesCopied = currentRead.buffer.length - skipSamples;
@@ -240,9 +244,9 @@ class OutputPort : Port
 							continue;
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
-						size_t slaveTime = Clock.currStdTime;
-						if (slaveTime > queue.currentWrite.masterTime)
-							writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
+						//size_t slaveTime = Clock.currStdTime;
+						//if (slaveTime > queue.currentWrite.masterTime)
+							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
 						queue.advanceWrite();
 						break;
 					default: break;
