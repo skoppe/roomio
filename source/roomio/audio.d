@@ -129,6 +129,7 @@ class OutputPort : Port
 				writefln("Play: %s, Slave: %s", playTime, slaveTime);
 				// when the local time is behind the time the current audio message should be played
 				if (slaveTime < playTime) {
+					writefln("Localtime behind %s hnsecs of stream", playTime - slaveTime);
 					// we calc how many samples of silence we need before the current audio message should be used
 					size_t silenceSamples = ((cast(double)(playTime - slaveTime)) / port.hnsecPerSample).to!size_t;
 					// when the amount of samples of silence is bigger than output buffer size
@@ -143,6 +144,7 @@ class OutputPort : Port
 					// and break the while loop
 					break;
 				} else {
+					writefln("Localtime ahead %s hnsecs of stream", slaveTime - playTime);
 					// otherwise, we calculate how many samples in the current message can be discarded
 					size_t skipSamples = ((cast(double)(slaveTime - playTime)) / port.hnsecPerSample).to!size_t;
 					// when that is larger than the samples in the messages
@@ -199,13 +201,12 @@ class OutputPort : Port
 				switch (raw.header.type) {
 					case MessageType.Audio:
 						if (queue.full) {
-							logInfo("Queue full!");
 							continue;
 						}
-						if (queue.empty) {
-							logInfo("Queue empty!");
-						}
 						readMessageInPlace(raw.data, queue.currentWrite());
+						size_t slaveTime = Clock.currStdTime;
+						if (slaveTime > queue.currentWrite.masterTime)
+							writefln("Delay in stream %s hnsecs", slaveTime - queue.currentWrite.masterTime);
 						queue.advanceWrite();
 						break;
 					default: break;
