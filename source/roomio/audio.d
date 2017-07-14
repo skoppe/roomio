@@ -203,9 +203,9 @@ class OutputPort : Port
 							continue;
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
-						size_t slaveTime = Clock.currStdTime;
-						if (slaveTime > queue.currentWrite.masterTime)
-							writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
+						//size_t slaveTime = Clock.currStdTime;
+						//if (slaveTime > queue.currentWrite.masterTime)
+							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
 						queue.advanceWrite();
 						break;
 					default: break;
