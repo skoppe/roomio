@@ -84,6 +84,101 @@ unittest {
 	calcSamplesDelay(1, 44100, 5, 64).shouldEqual(192);
 }
 
+void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, ref AudioMessage currentRead, short[] output, size_t hnsecDelay, size_t slaveTime, double hnsecPerSample) {
+	size_t framesPerBuffer = output.length;
+	// there is only one path in the while loop that doesn't break
+	// that is the path where all samples in the current message can be discarded
+	while(true) {
+		// playTime is the time the first sample in the message should be played on
+		size_t playTime = currentRead.masterTime + hnsecDelay;
+
+		// when the local time is behind the time the current audio message should be played
+		if (slaveTime < playTime) {
+			//writefln("Localtime behind %s hnsecs of stream", playTime - slaveTime);
+			// we calc how many samples of silence we need before the current audio message should be used
+			size_t silenceSamples = ((cast(double)(playTime - slaveTime)) / hnsecPerSample).to!size_t;
+			// when the amount of samples of silence is bigger than output buffer size
+			if (silenceSamples >= framesPerBuffer) {
+				// we fill everything with silence
+				output[0..framesPerBuffer] = 0;
+			} else {
+				// otherwise we fill ouput with partial silence and partial audio
+				output[0..silenceSamples] = 0;
+				output[silenceSamples..$] = currentRead.buffer[0..framesPerBuffer - silenceSamples];
+			}
+			// and break the while loop
+			break;
+		} else {
+			//writefln("Localtime ahead %s hnsecs of stream", slaveTime - playTime);
+			// otherwise, we calculate how many samples in the current message can be discarded
+			size_t skipSamples = ((cast(double)(slaveTime - playTime)) / hnsecPerSample).to!size_t;
+			// when that is larger than the samples in the messages
+			if (skipSamples >= currentRead.buffer.length)
+			{
+				// we drop the message
+				queue.advanceRead();
+				// we check if the queue is empty
+				if (queue.empty) {
+					// and if so we fill with silence and break while the loop
+					output[0..framesPerBuffer] = 0;
+					break;
+				}
+				// if the queue isn't empty we continue the while loop
+			} else {
+				// when the amount of samples to be skipped is smaller than the amount of samples in the current message
+				// we calculate how many samples are left in the audio message
+				size_t samplesCopied = currentRead.buffer.length - skipSamples;
+				// and copy those
+				output[0..samplesCopied] = currentRead.buffer[skipSamples..$];
+				// advance the queue
+				queue.advanceRead();
+				// and if the queue is not empty
+				if (!queue.empty) {
+					// we fill with the audio from the next message
+					output[samplesCopied..$] = currentRead.buffer[0..skipSamples];
+				} else {
+					// otherwise we fill with silence
+					output[samplesCopied..$] = 0;
+				}
+				// and break the while loop
+				break;
+			}
+		}
+	}
+}
+
+@("copyBufferTimed")
+unittest {
+	CircularQueue!(AudioMessage, 2) queue;
+	queue.currentWrite.buffer = [0,1,2,3,4,5];
+	queue.currentWrite.masterTime = 10_000;
+	queue.advanceWrite();
+	short[] output = new short[6];
+	size_t hnsecDelay = 500;
+	size_t slaveTime = 10_500;
+	double hnsecPerSample = 200;
+	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	output.shouldEqual([0,1,2,3,4,5]);
+
+	queue.currentWrite.buffer = [1,2,3,4,5,6];
+	queue.currentWrite.masterTime = 10_000;
+	queue.advanceWrite();
+
+	slaveTime = 10_700;
+	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	output.shouldEqual([2,3,4,5,6,0]);
+
+	queue.currentWrite.buffer = [2,3,4,5,6,7];
+	queue.currentWrite.masterTime = 10_000;
+	queue.advanceWrite();
+
+	slaveTime = 10_300;
+	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	output.shouldEqual([0,2,3,4,5,6]);
+	slaveTime = 10_300 + 1_200;
+	copyBufferTimed(queue, queue.currentRead, output, hnsecDelay, slaveTime, hnsecPerSample);
+	output.shouldEqual([7,0,0,0,0,0]);
+}
 
 class OutputPort : Port
 {
@@ -120,65 +215,7 @@ class OutputPort : Port
 			}
 			size_t slaveTime = Clock.currStdTime;
 
-			// there is only one path in the while loop that doesn't break
-			// that is the path where all samples in the current message can be discarded
-			while(true) {
-				// playTime is the time the first sample in the message should be played on
-				size_t playTime = port.queue.currentRead.masterTime + port.hnsecDelay;
-
-				// when the local time is behind the time the current audio message should be played
-				if (slaveTime < playTime) {
-					//writefln("Localtime behind %s hnsecs of stream", playTime - slaveTime);
-					// we calc how many samples of silence we need before the current audio message should be used
-					size_t silenceSamples = ((cast(double)(playTime - slaveTime)) / port.hnsecPerSample).to!size_t;
-					// when the amount of samples of silence is bigger than output buffer size
-					if (silenceSamples >= framesPerBuffer) {
-						// we fill everything with silence
-						output[0..framesPerBuffer] = 0;
-					} else {
-						// otherwise we fill ouput with partial silence and partial audio
-						output[0..silenceSamples] = 0;
-						output[silenceSamples..$] = port.queue.currentRead.buffer[0..framesPerBuffer - silenceSamples];
-					}
-					// and break the while loop
-					break;
-				} else {
-					//writefln("Localtime ahead %s hnsecs of stream", slaveTime - playTime);
-					// otherwise, we calculate how many samples in the current message can be discarded
-					size_t skipSamples = ((cast(double)(slaveTime - playTime)) / port.hnsecPerSample).to!size_t;
-					// when that is larger than the samples in the messages
-					if (skipSamples >= port.queue.currentRead.buffer.length)
-					{
-						// we drop the message
-						port.queue.advanceRead();
-						// we check if the queue is empty
-						if (port.queue.empty) {
-							// and if so we fill with silence and break while the loop
-							output[0..framesPerBuffer] = 0;
-							break;
-						}
-						// if the queue isn't empty we continue the while loop
-					} else {
-						// when the amount of samples to be skipped is smaller than the amount of samples in the current message
-						// we calculate how many samples are left in the audio message
-						size_t samplesCopied = port.queue.currentRead.buffer.length - skipSamples;
-						// and copy those
-						output[0..samplesCopied] = port.queue.currentRead.buffer[skipSamples..$];
-						// advance the queue
-						port.queue.advanceRead();
-						// and if the queue is not empty
-						if (!port.queue.empty) {
-							// we fill with the audio from the next message
-							output[samplesCopied..$] = port.queue.currentRead.buffer[0..skipSamples];
-						} else {
-							// otherwise we fill with silence
-							output[samplesCopied..$] = 0;
-						}
-						// and break the while loop
-						break;
-					}
-				}
-			}
+			copyBufferTimed(port.queue, port.queue.currentRead, output, port.hnsecDelay, slaveTime, port.hnsecPerSample);
 
 			return paContinue;
 		}
@@ -203,9 +240,9 @@ class OutputPort : Port
 							continue;
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
-						//size_t slaveTime = Clock.currStdTime;
-						//if (slaveTime > queue.currentWrite.masterTime)
-							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
+						size_t slaveTime = Clock.currStdTime;
+						if (slaveTime > queue.currentWrite.masterTime)
+							writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
 						queue.advanceWrite();
 						break;
 					default: break;

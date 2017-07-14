@@ -31,7 +31,7 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   void advanceRead() {
-    assert(!full);
+    assert(!empty);
     atomicStore(head,incr(head));
   }
 
