@@ -126,7 +126,6 @@ class OutputPort : Port
 				// playTime is the time the first sample in the message should be played on
 				size_t playTime = port.queue.currentRead.masterTime + port.hnsecDelay;
 
-				writefln("Play: %s, Slave: %s", playTime, slaveTime);
 				// when the local time is behind the time the current audio message should be played
 				if (slaveTime < playTime) {
 					writefln("Localtime behind %s hnsecs of stream", playTime - slaveTime);
@@ -205,8 +204,8 @@ class OutputPort : Port
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
 						size_t slaveTime = Clock.currStdTime;
-						if (slaveTime > queue.currentWrite.masterTime)
-							writefln("Delay in stream %s hnsecs", slaveTime - queue.currentWrite.masterTime);
+						//if (slaveTime > queue.currentWrite.masterTime)
+						//	writefln("Delay in stream %s hnsecs", slaveTime - queue.currentWrite.masterTime);
 						queue.advanceWrite();
 						break;
 					default: break;
