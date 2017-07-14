@@ -15,6 +15,7 @@ import core.stdc.config;
 import std.stdio;
 import core.time : hnsecs;
 import std.datetime : Clock;
+import std.conv : to;
 
 import roomio.testhelpers;
 
@@ -57,7 +58,7 @@ class InputPort : Port
 				long samplesCounter;
 				while(running) {
 					Pa_ReadStream(stream, buffer[].ptr, 64);
-					transport.send(AudioMessage(buffer[], 0, samplesCounter));
+					transport.send(AudioMessage(buffer[], Clock.currStdTime, samplesCounter));
 					samplesCounter += 64;
 					yield();
 				}
@@ -83,6 +84,7 @@ unittest {
 	calcSamplesDelay(1, 44100, 5, 64).shouldEqual(192);
 }
 
+
 class OutputPort : Port
 {
 	private {
@@ -90,12 +92,14 @@ class OutputPort : Port
 		PaDeviceIndex idx;
 		PaTime latency;
 		Task tid;
-		uint msDelay;
+		uint hnsecDelay;
+		double hnsecPerSample;
 		CircularQueue!(AudioMessage, 48) queue;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
 		this.idx = idx;
-		this.msDelay = msDelay;
+		this.hnsecDelay = msDelay * 10_000;
+		this.hnsecPerSample = 10_000_000 / samplerate;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
 	override void start(Transport transport)
@@ -106,16 +110,73 @@ class OutputPort : Port
 		                             size_t framesPerBuffer,
 		                             const(PaStreamCallbackTimeInfo)* timeInfo,
 		                             PaStreamCallbackFlags statusFlags,
-		                             void *userData) @nogc {
+		                             void *userData) {
 			OutputPort port = cast(OutputPort)(userData);
+			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
+				// we fill everything with silence
+				output[0..framesPerBuffer] = 0;
 				return paContinue;
 			}
-			port.queue.pop!(size_t, void*)((ref AudioMessage m, size_t framesPerBuffer, void* outputBuffer){
-				assert(m.buffer.length == framesPerBuffer);
-				short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
-				output[] = m.buffer[];
-			}, framesPerBuffer, outputBuffer);
+			size_t slaveTime = Clock.currStdTime;
+
+			// there is only one path in the while loop that doesn't break
+			// that is the path where all samples in the current message can be discarded
+			while(true) {
+				// playTime is the time the first sample in the message should be played on
+				size_t playTime = port.queue.currentRead.masterTime + port.hnsecDelay;
+
+				// when the local time is behind the time the current audio message should be played
+				if (slaveTime < playTime) {
+					// we calc how many samples of silence we need before the current audio message should be used
+					size_t silenceSamples = ((cast(double)(playTime - slaveTime)) / port.hnsecPerSample).to!size_t;
+					// when the amount of samples of silence is bigger than output buffer size
+					if (silenceSamples >= framesPerBuffer) {
+						// we fill everything with silence
+						output[0..framesPerBuffer] = 0;
+					} else {
+						// otherwise we fill ouput with partial silence and partial audio
+						output[0..silenceSamples] = 0;
+						output[silenceSamples..$] = port.queue.currentRead.buffer[0..silenceSamples];
+					}
+					// and break the while loop
+					break;
+				} else {
+					// otherwise, we calculate how many samples in the current message can be discarded
+					size_t skipSamples = ((cast(double)(slaveTime - playTime)) / port.hnsecPerSample).to!size_t;
+					// when that is larger than the samples in the messages
+					if (skipSamples >= port.queue.currentRead.buffer.length)
+					{
+						// we drop the message
+						port.queue.advanceRead();
+						// we check if the queue is empty
+						if (port.queue.empty) {
+							// and if so we fill with silence and break while the loop
+							output[0..framesPerBuffer] = 0;
+							break;
+						}
+						// if the queue isn't empty we continue the while loop
+					} else {
+						// when the amount of samples to be skipped is smaller than the amount of samples in the current message
+						// we calculate how many samples are left in the audio message
+						size_t samplesCopied = port.queue.currentRead.buffer.length - skipSamples;
+						// and copy those
+						output[0..samplesCopied] = port.queue.currentRead.buffer[skipSamples..$];
+						// advance the queue
+						port.queue.advanceRead();
+						// and if the queue is not empty
+						if (!port.queue.empty) {
+							// we fill with the audio from the next message
+							output[samplesCopied..$] = port.queue.currentRead.buffer[0..skipSamples];
+						} else {
+							// otherwise we fill with silence
+							output[samplesCopied..$] = 0;
+						}
+						// and break the while loop
+						break;
+					}
+				}
+			}
 
 			return paContinue;
 		}
@@ -131,7 +192,6 @@ class OutputPort : Port
 		}
 
 		tid = runTask({
-			bool started = false;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
@@ -143,18 +203,8 @@ class OutputPort : Port
 						if (queue.empty) {
 							logInfo("Queue empty!");
 						}
-						alias RawType = typeof(raw);
-						queue.push!(ubyte[])((ref AudioMessage audio, ubyte[] raw) {
-							readMessageInPlace(raw, audio);
-						}, raw.data);
-						if (!started)
-						{
-							started = true;
-							runTask({
-								sleep(msDelay.msecs);
-								Pa_StartStream(stream);
-							});
-						}
+						readMessageInPlace(raw.data, queue.currentWrite());
+						queue.advanceWrite();
 						break;
 					default: break;
 				}

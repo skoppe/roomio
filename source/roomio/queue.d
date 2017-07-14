@@ -26,6 +26,24 @@ struct CircularQueue(Element, size_t Size) {
     atomicStore(tail,incr(tail));
   }
 
+  ref Element currentRead() {
+    return data[head];
+  }
+
+  void advanceRead() {
+    assert(!full);
+    atomicStore(head,incr(head));
+  }
+
+  ref Element currentWrite() {
+    return data[tail];
+  }
+
+  void advanceWrite() {
+    assert(!full);
+    atomicStore(tail,incr(tail));
+  }
+
   bool empty() pure const { return tail == head; }
   bool full() pure const { return incr(tail) == head; }
   size_t length() pure const {
@@ -73,4 +91,21 @@ unittest {
   }
   queue.empty.shouldBeTrue;
 
+}
+
+@("CircularQueue.byRef")
+unittest {
+  auto queue = CircularQueue!(int, 6)();
+  queue.empty.shouldBeTrue;
+  queue.full.shouldBeFalse;
+
+  queue.currentWrite() = 42;
+  queue.advanceWrite();
+  queue.empty.shouldBeFalse;
+  queue.full.shouldBeFalse;
+
+  queue.currentRead().shouldEqual(42);
+  queue.advanceRead();
+  queue.empty.shouldBeTrue;
+  queue.full.shouldBeFalse;
 }
