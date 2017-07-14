@@ -126,6 +126,7 @@ class OutputPort : Port
 				// playTime is the time the first sample in the message should be played on
 				size_t playTime = port.queue.currentRead.masterTime + port.hnsecDelay;
 
+				writefln("Play: %s, Slave: %s", playTime, slaveTime);
 				// when the local time is behind the time the current audio message should be played
 				if (slaveTime < playTime) {
 					// we calc how many samples of silence we need before the current audio message should be used
@@ -188,6 +189,7 @@ class OutputPort : Port
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
 		{
+			Pa_StartStream(stream);
 			latency = Pa_GetStreamInfo(stream).outputLatency;
 		}
 
