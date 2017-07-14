@@ -189,9 +189,9 @@ class OutputPort : Port
 		Task tid;
 		uint hnsecDelay;
 		double hnsecPerSample;
-		CircularQueue!(AudioMessage, 48) queue;
+		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 35) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 100) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
