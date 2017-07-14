@@ -138,7 +138,7 @@ class OutputPort : Port
 					} else {
 						// otherwise we fill ouput with partial silence and partial audio
 						output[0..silenceSamples] = 0;
-						output[silenceSamples..$] = port.queue.currentRead.buffer[0..silenceSamples];
+						output[silenceSamples..$] = port.queue.currentRead.buffer[0..framesPerBuffer - silenceSamples];
 					}
 					// and break the while loop
 					break;
