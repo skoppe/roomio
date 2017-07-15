@@ -17,6 +17,7 @@ import core.time : hnsecs;
 import std.datetime : Clock;
 import std.conv : to;
 import std.format;
+import std.algorithm : max, min;
 
 import roomio.testhelpers;
 
@@ -186,6 +187,66 @@ unittest {
 	output.shouldEqual([7,0,0,0,0,0]);
 }
 
+void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample) {
+	stats.samples += 1;
+	auto slaveTime = Clock.currStdTime;
+	auto masterStartTime = message.startTime;
+	auto masterSampleCounter = message.sampleCounter;
+	auto masterTime = masterStartTime + cast(size_t)(masterSampleCounter * hnsecPerSample);
+	assert(slaveTime > masterTime, "Clock out of sync");
+	auto currentWireLatency = slaveTime - masterTime;
+	stats.std.add(cast(double)currentWireLatency);
+}
+
+struct RunningMean {
+	size_t n;
+	size_t memory;
+	double mean;
+	this(size_t memory = 20) {
+		this.memory = memory;
+	}
+	void add(double val) {
+		if (n < memory)
+			n += 1;
+		mean = (val - mean) / n;
+	}
+}
+
+struct RunningStd {
+	RunningMean mean;
+	double[] values;
+	size_t idx;
+	this(size_t memory = 20) {
+		values.reserve(memory);
+	}
+	void add(double val) {
+		mean.add(val);
+		values[idx] = val;
+		idx = (idx + 1) % values.capacity;
+	}
+	double getStd() {
+		size_t end = min(mean.n, values.capacity);
+		double sum;
+		double m = mean.mean;
+		foreach(i; 0..end)
+			sum += (values[i] - m)*(values[i] - m);
+		if (end == 1)
+			return sum;
+		return sum / end;
+	}
+	double getMax() {
+		size_t end = min(mean.n, values.capacity);
+		double maxValue = 0.0;
+		foreach(i; 0..end)
+			maxValue = max(maxValue, values[i]);
+		return maxValue;
+	}
+}
+
+struct Stats {
+	RunningStd std;
+	size_t samples;
+}
 class OutputPort : Port
 {
 	private {
@@ -201,7 +262,7 @@ class OutputPort : Port
 		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 17) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
@@ -282,8 +343,8 @@ class OutputPort : Port
 		}
 
 		tid = runTask({
-			bool firstRun = true;
-			int primeCounter = 20;
+			bool started = false;
+			Stats stats;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
@@ -292,13 +353,9 @@ class OutputPort : Port
 							continue;
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
-						if (firstRun) {
-							if (primeCounter > 0)
-							{
-								primeCounter -= 1;
-								break;
-							} else
-							{
+						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
+						if (!started) {
+							if (stats.samples > 20 && stats.std.getMax < this.hnsecDelay) {
 								slaveStartTime = Clock.currStdTime;
 								auto masterStartTime = queue.currentWrite.startTime;
 								auto masterSampleCounter = queue.currentWrite.sampleCounter;
@@ -309,23 +366,21 @@ class OutputPort : Port
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-								assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
 								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
 								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
 								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
 								samplesSilence -= samplesOutputLatency;
+
+								queue.advanceWrite();
+								Pa_StartStream(stream);
+								started = true;
+							} else if (stats.samples > 1000) {
+								assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean, stats.std.getStd, stats.std.getMax));
 							}
-						}
-						if ((queue.currentWrite.sampleCounter % 64000) == 0)
-							writefln("Queue size = %s",queue.length);
-						//size_t slaveTime = Clock.currStdTime;
-						//if (slaveTime > queue.currentWrite.masterTime)
-							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
-						if (primeCounter == 0)
-							queue.advanceWrite();
-						if (firstRun && primeCounter == 0) {
-							Pa_StartStream(stream);
-							firstRun = false;
+						} else {
+							if ((queue.currentWrite.sampleCounter % 64000) == 0)
+								writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax);
+							queue.advanceWrite();							
 						}
 						break;
 					default: break;
