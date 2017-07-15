@@ -227,7 +227,7 @@ class OutputPort : Port
 
 			size_t messageSamples = port.queue.currentRead.buffer.length;
 			size_t messageSampleCounter = port.queue.currentRead.sampleCounter;
-			writefln("Queue length %s, slave samples %s, master samples %s", port.queue.length, port.sampleCounter, messageSampleCounter);
+			//writefln("Queue length %s, slave samples %s, master samples %s", port.queue.length, port.sampleCounter, messageSampleCounter);
 			if (port.samplesSilence) {
 				size_t samplesSilence = min(framesPerBuffer, port.samplesSilence);
 				output[0..samplesSilence] = 0;
@@ -297,6 +297,8 @@ class OutputPort : Port
 							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
 							samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
 						}
+						if ((queue.currentWrite.sampleCounter % 44100) == 0)
+							writefln("Queue size = %s",queue.length);
 						//size_t slaveTime = Clock.currStdTime;
 						//if (slaveTime > queue.currentWrite.masterTime)
 							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
