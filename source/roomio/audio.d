@@ -55,11 +55,12 @@ class InputPort : Port
 			latency = Pa_GetStreamInfo(stream).inputLatency;
 			tid = runTask({
 				short[64] buffer;
-				long samplesCounter;
+				long sampleCounter;
+				size_t startTime = Clock.currStdTime;
 				while(running) {
 					Pa_ReadStream(stream, buffer[].ptr, 64);
-					transport.send(AudioMessage(buffer[], Clock.currStdTime, samplesCounter));
-					samplesCounter += 64;
+					transport.send(AudioMessage(buffer[], startTime, sampleCounter));
+					sampleCounter += 64;
 					yield();
 				}
 				Pa_CloseStream(this.stream);
@@ -193,9 +194,13 @@ class OutputPort : Port
 		Task tid;
 		uint hnsecDelay;
 		double hnsecPerSample;
+		size_t slaveStartTime;
+		size_t sampleCounter;
+		size_t sampleOffset;
+		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 100) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 8) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
@@ -217,11 +222,44 @@ class OutputPort : Port
 				output[0..framesPerBuffer] = 0;
 				return paContinue;
 			}
-			size_t slaveTime = Clock.currStdTime;
+			//size_t slaveTime = Clock.currStdTime;
 
-			writeln(*timeInfo);
-			copyBufferTimed(port.queue, output, port.hnsecDelay, slaveTime, port.hnsecPerSample);
-
+			size_t messageSamples = port.queue.currentRead.buffer.length;
+			size_t messageSampleCounter = port.queue.currentRead.sampleCounter;
+			if (port.samplesSilence) {
+				size_t samplesSilence = min(framesPerBuffer, port.samplesSilence);
+				output[0..samplesSilence] = 0;
+				port.samplesSilence -= samplesSilence;
+				if (samplesSilence == framesPerBuffer)
+					return paContinue;
+				port.sampleOffset = samplesSilence;
+				output[samplesSilence..$] = port.queue.currentRead.buffer[0..messageSamples - samplesSilence];
+				return paContinue;
+			} else {
+				if (port.sampleCounter == messageSampleCounter) {
+					if (port.sampleOffset) {
+						output[0..messageSamples - port.sampleOffset] = port.queue.currentRead.buffer[port.sampleOffset..$];
+						port.queue.advanceRead();
+						port.sampleCounter += 64;
+						if (port.queue.empty) {
+							output[messageSamples - port.sampleOffset..$] = 0;
+							port.sampleOffset = 0;
+							return paContinue;
+						} else {
+							output[messageSamples - port.sampleOffset .. $] = port.queue.currentRead.buffer[0..port.sampleOffset];
+							return paContinue;
+						}
+					}
+					output[0..$] = port.queue.currentRead.buffer[0..$];
+					port.queue.advanceRead();
+					port.sampleCounter += 64;
+					return paContinue;
+				} else {
+					output[0..$] = 0;
+					port.sampleCounter += 64;
+					port.queue.advanceRead();
+				}
+			}
 			return paContinue;
 		}
 
@@ -232,11 +270,11 @@ class OutputPort : Port
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
 		{
-			Pa_StartStream(stream);
 			latency = Pa_GetStreamInfo(stream).outputLatency;
 		}
 
 		tid = runTask({
+			bool firstRun = true;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
@@ -245,6 +283,20 @@ class OutputPort : Port
 							continue;
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
+						if (firstRun) {
+							slaveStartTime = Clock.currStdTime;
+							auto masterStartTime = queue.currentWrite.startTime;
+							auto masterSampleCounter = queue.currentWrite.sampleCounter;
+							sampleCounter = masterSampleCounter;
+							auto masterCurrentSampleTime = masterStartTime + cast(size_t)(masterSampleCounter * this.hnsecPerSample);
+							assert(slaveStartTime > masterCurrentSampleTime);
+
+							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
+							assert(currentWireLatency < this.hnsecDelay);
+							samplesSilence = this.hnsecDelay - currentWireLatency;// the amount of samples of silence to reach desired latency
+							Pa_StartStream(stream);
+							firstRun = false;
+						}
 						//size_t slaveTime = Clock.currStdTime;
 						//if (slaveTime > queue.currentWrite.masterTime)
 							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");

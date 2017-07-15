@@ -82,8 +82,8 @@ struct UnlinkMessage {
 
 struct AudioMessage {
   short[] buffer;
-  size_t masterTime;
-  long samplesCounter;
+  size_t startTime;
+  size_t sampleCounter;
 }
 
 auto readHeader(ubyte[] raw) {
