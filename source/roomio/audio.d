@@ -200,7 +200,7 @@ class OutputPort : Port
 		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 8) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 20) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
@@ -289,10 +289,10 @@ class OutputPort : Port
 							auto masterSampleCounter = queue.currentWrite.sampleCounter;
 							sampleCounter = masterSampleCounter;
 							auto masterCurrentSampleTime = masterStartTime + cast(size_t)(masterSampleCounter * this.hnsecPerSample);
-							assert(slaveStartTime > masterCurrentSampleTime);
+							assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-							assert(currentWireLatency < this.hnsecDelay);
+							assert(currentWireLatency < this.hnsecDelay, "Network latency too high");
 							samplesSilence = this.hnsecDelay - currentWireLatency;// the amount of samples of silence to reach desired latency
 							Pa_StartStream(stream);
 							firstRun = false;
