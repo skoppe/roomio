@@ -206,7 +206,7 @@ struct RunningMean {
 		this.memory = memory;
 	}
 	void add(double val) {
-		if (n + 1 < memory)
+		if (n < memory)
 			n += 1;
 		mean = (val - mean) / n;
 	}
@@ -225,17 +225,17 @@ struct RunningStd {
 		idx = (idx + 1) % values.capacity;
 	}
 	double getStd() {
-		size_t end = min(mean.n, values.capacity);
+		size_t end = min(mean.n, values.capacity - 1);
 		double sum;
 		double m = mean.mean;
 		foreach(i; 0..end)
 			sum += (values[i] - m)*(values[i] - m);
-		if (end == 1)
+		if (end < 2)
 			return sum;
 		return sum / end;
 	}
 	double getMax() {
-		size_t end = min(mean.n, values.capacity);
+		size_t end = min(mean.n, values.capacity - 1);
 		double maxValue = 0.0;
 		foreach(i; 0..end)
 			maxValue = max(maxValue, values[i]);
