@@ -16,6 +16,7 @@ import std.stdio;
 import core.time : hnsecs;
 import std.datetime : Clock;
 import std.conv : to;
+import std.format;
 
 import roomio.testhelpers;
 
@@ -292,7 +293,7 @@ class OutputPort : Port
 							assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-							assert(currentWireLatency < this.hnsecDelay, "Network latency too high");
+							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency);
 							samplesSilence = this.hnsecDelay - currentWireLatency;// the amount of samples of silence to reach desired latency
 							Pa_StartStream(stream);
 							firstRun = false;
