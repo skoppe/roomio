@@ -86,7 +86,7 @@ unittest {
 	calcSamplesDelay(2, 44100, 5, 64).shouldEqual(448);
 	calcSamplesDelay(1, 44100, 5, 64).shouldEqual(192);
 }
-
+/*
 void copyBufferTimed(size_t N)(ref CircularQueue!(AudioMessage, N) queue, short[] output, size_t hnsecDelay, size_t slaveTime, double hnsecPerSample) {
 	size_t framesPerBuffer = output.length;
 	// there is only one path in the while loop that doesn't break
@@ -185,7 +185,7 @@ unittest {
 	slaveTime = 10_300 + 1_200;
 	copyBufferTimed(queue, output, hnsecDelay, slaveTime, hnsecPerSample);
 	output.shouldEqual([7,0,0,0,0,0]);
-}
+}*/
 
 void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample) {
 	stats.samples += 1;
@@ -201,7 +201,7 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 struct RunningMean {
 	size_t n;
 	size_t memory;
-	double mean;
+	double mean = 0;
 	this(size_t memory = 20) {
 		this.memory = memory;
 	}
@@ -227,7 +227,7 @@ struct RunningStd {
 	}
 	double getStd() {
 		size_t end = min(mean.n, values.length - 1);
-		double sum;
+		double sum = 0;
 		double m = mean.mean;
 		foreach(i; 0..end)
 			sum += (values[i] - m)*(values[i] - m);
@@ -242,6 +242,14 @@ struct RunningStd {
 			maxValue = max(maxValue, values[i]);
 		return maxValue;
 	}
+}
+
+@("RunningStd")
+unittest {
+	RunningStd s = RunningStd(20);
+	s.getStd().shouldEqual(double.NaN);
+	s.add(1.0);
+	s.getStd().shouldEqual(0.0);
 }
 
 struct Stats {
@@ -378,12 +386,12 @@ class OutputPort : Port
 								queue.advanceWrite();
 								Pa_StartStream(stream);
 								started = true;
-							} else if (stats.samples > 1000) {
-								assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean, stats.std.getStd, stats.std.getMax));
+							} else if (stats.samples > 2000) {
+								assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
 							}
 						} else {
 							if ((queue.currentWrite.sampleCounter % 64000) == 0)
-								writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax);
+								writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean.mean, stats.std.getStd, stats.std.getMax);
 							queue.advanceWrite();							
 						}
 						break;
