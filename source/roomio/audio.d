@@ -217,15 +217,15 @@ struct RunningStd {
 	double[] values;
 	size_t idx;
 	this(size_t memory = 20) {
-		values.reserve(memory);
+		values = new double[memory];
 	}
 	void add(double val) {
 		mean.add(val);
 		values[idx] = val;
-		idx = (idx + 1) % values.capacity;
+		idx = (idx + 1) % values.length;
 	}
 	double getStd() {
-		size_t end = min(mean.n, values.capacity - 1);
+		size_t end = min(mean.n, values.length - 1);
 		double sum;
 		double m = mean.mean;
 		foreach(i; 0..end)
@@ -235,7 +235,7 @@ struct RunningStd {
 		return sum / end;
 	}
 	double getMax() {
-		size_t end = min(mean.n, values.capacity - 1);
+		size_t end = min(mean.n, values.length - 1);
 		double maxValue = 0.0;
 		foreach(i; 0..end)
 			maxValue = max(maxValue, values[i]);
