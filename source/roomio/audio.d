@@ -225,6 +225,11 @@ class OutputPort : Port
 			}
 			//size_t slaveTime = Clock.currStdTime;
 
+			if (statusFlags == paOutputUnderflow) {
+				writeln("Output Underflow");
+			} else if (statusFlags == paOutputOverflow) {
+				writeln("Output Overflow");
+			}
 			size_t messageSamples = port.queue.currentRead.buffer.length;
 			size_t messageSampleCounter = port.queue.currentRead.sampleCounter;
 			//writefln("Queue length %s, slave samples %s, master samples %s", port.queue.length, port.sampleCounter, messageSampleCounter);
@@ -291,6 +296,7 @@ class OutputPort : Port
 							if (primeCounter > 0)
 							{
 								primeCounter -= 1;
+								break;
 							} else
 							{
 								slaveStartTime = Clock.currStdTime;
@@ -315,7 +321,8 @@ class OutputPort : Port
 						//size_t slaveTime = Clock.currStdTime;
 						//if (slaveTime > queue.currentWrite.masterTime)
 							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
-						queue.advanceWrite();
+						if (primeCounter == 0)
+							queue.advanceWrite();
 						if (firstRun && primeCounter == 0) {
 							Pa_StartStream(stream);
 							firstRun = false;
