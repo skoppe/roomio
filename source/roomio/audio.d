@@ -208,7 +208,7 @@ struct RunningMean {
 	void add(double val) {
 		if (n < memory)
 			n += 1;
-		mean = (val - mean) / n;
+		mean += (val - mean) / n;
 	}
 }
 
@@ -247,9 +247,11 @@ struct RunningStd {
 @("RunningStd")
 unittest {
 	RunningStd s = RunningStd(20);
-	s.getStd().shouldEqual(double.NaN);
+	s.getStd().shouldEqual(0.0);
 	s.add(1.0);
 	s.getStd().shouldEqual(0.0);
+	s.add(5.0);
+	s.mean.mean.shouldEqual(3.0);
 }
 
 struct Stats {
@@ -386,14 +388,14 @@ class OutputPort : Port
 								queue.advanceWrite();
 								Pa_StartStream(stream);
 								started = true;
-							} else if (stats.samples > 2000) {
-								assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
-							}
-						} else {
-							if ((queue.currentWrite.sampleCounter % 64000) == 0)
-								writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean.mean, stats.std.getStd, stats.std.getMax);
-							queue.advanceWrite();							
+						} 
+						if (stats.samples > 2000) {
+							assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
 						}
+						if ((queue.currentWrite.sampleCounter % 64000) == 0)
+							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean.mean, stats.std.getStd, stats.std.getMax);
+						if (started)
+							queue.advanceWrite();
 						break;
 					default: break;
 				}
