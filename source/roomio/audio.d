@@ -295,7 +295,7 @@ class OutputPort : Port
 
 							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
 							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
-							samplesSilence = this.hnsecDelay - currentWireLatency;// the amount of samples of silence to reach desired latency
+							samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
 						}
 						//size_t slaveTime = Clock.currStdTime;
 						//if (slaveTime > queue.currentWrite.masterTime)
