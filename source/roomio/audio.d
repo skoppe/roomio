@@ -216,7 +216,8 @@ struct RunningStd {
 	RunningMean mean;
 	double[] values;
 	size_t idx;
-	this(size_t memory = 20) {
+	this(size_t memory) {
+		mean = RunningMean(memory);
 		values = new double[memory];
 	}
 	void add(double val) {
@@ -246,6 +247,9 @@ struct RunningStd {
 struct Stats {
 	RunningStd std;
 	size_t samples;
+	this(size_t memory) {
+		std = RunningStd(memory);
+	}
 }
 class OutputPort : Port
 {
@@ -344,7 +348,7 @@ class OutputPort : Port
 
 		tid = runTask({
 			bool started = false;
-			Stats stats;
+			Stats stats = Stats(20);
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
