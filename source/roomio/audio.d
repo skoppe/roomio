@@ -388,6 +388,7 @@ class OutputPort : Port
 								queue.advanceWrite();
 								Pa_StartStream(stream);
 								started = true;
+							}
 						} 
 						if (stats.samples > 2000) {
 							assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
