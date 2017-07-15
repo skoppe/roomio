@@ -191,7 +191,7 @@ class OutputPort : Port
 	private {
 		PaStream* stream;
 		PaDeviceIndex idx;
-		PaTime latency;
+		PaTime outputLatency;
 		Task tid;
 		uint hnsecDelay;
 		double hnsecPerSample;
@@ -201,7 +201,7 @@ class OutputPort : Port
 		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 20) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
@@ -272,8 +272,8 @@ class OutputPort : Port
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
 		{
-			latency = Pa_GetStreamInfo(stream).outputLatency;
-			writefln("Output latency = %s", latency);
+			outputLatency = Pa_GetStreamInfo(stream).outputLatency;
+			writefln("Output latency = %s", outputLatency);
 		}
 
 		tid = runTask({
@@ -304,7 +304,10 @@ class OutputPort : Port
 
 								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
 								assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
+								auto samplesOutputLatency = this.outputLatency * this.samplerate;
 								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
+								samplesSilence -= samplesOutputLatency;
 							}
 						}
 						if ((queue.currentWrite.sampleCounter % 64000) == 0)
