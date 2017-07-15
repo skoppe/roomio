@@ -18,6 +18,7 @@ import std.datetime : Clock;
 import std.conv : to;
 import std.format;
 import std.algorithm : max, min;
+import std.math;
 
 import roomio.testhelpers;
 
@@ -233,8 +234,8 @@ struct RunningStd {
 		foreach(i; 0..end)
 			sum += (values[i] - m)*(values[i] - m);
 		if (end < 2)
-			return sum;
-		return sum / end;
+			return sqrt(sum);
+		return sqrt(sum / end);
 	}
 	double getMax() {
 		size_t end = min(mean.n, values.length - 1);
