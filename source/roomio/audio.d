@@ -206,7 +206,7 @@ struct RunningMean {
 		this.memory = memory;
 	}
 	void add(double val) {
-		if (n < memory)
+		if (n + 1 < memory)
 			n += 1;
 		mean = (val - mean) / n;
 	}
