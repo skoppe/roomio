@@ -195,6 +195,7 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 	auto masterTime = masterStartTime + cast(size_t)(masterSampleCounter * hnsecPerSample);
 	assert(slaveTime > masterTime, "Clock out of sync");
 	auto currentWireLatency = slaveTime - masterTime;
+	writeln(currentWireLatency);
 	stats.std.add(cast(double)currentWireLatency);
 }
 
