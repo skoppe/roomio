@@ -293,7 +293,7 @@ class OutputPort : Port
 							assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency);
+							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
 							samplesSilence = this.hnsecDelay - currentWireLatency;// the amount of samples of silence to reach desired latency
 							Pa_StartStream(stream);
 							firstRun = false;
