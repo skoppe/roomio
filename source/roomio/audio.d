@@ -201,7 +201,7 @@ class OutputPort : Port
 		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 40) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 20) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
@@ -273,10 +273,12 @@ class OutputPort : Port
 		} else
 		{
 			latency = Pa_GetStreamInfo(stream).outputLatency;
+			writefln("Output latency = %s", latency);
 		}
 
 		tid = runTask({
 			bool firstRun = true;
+			int primeCounter = 20;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
@@ -286,24 +288,32 @@ class OutputPort : Port
 						}
 						readMessageInPlace(raw.data, queue.currentWrite());
 						if (firstRun) {
-							slaveStartTime = Clock.currStdTime;
-							auto masterStartTime = queue.currentWrite.startTime;
-							auto masterSampleCounter = queue.currentWrite.sampleCounter;
-							sampleCounter = masterSampleCounter;
-							auto masterCurrentSampleTime = masterStartTime + cast(size_t)(masterSampleCounter * this.hnsecPerSample);
-							assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
+							if (primeCounter > 0)
+							{
+								primeCounter -= 1;
+							} else
+							{
+								slaveStartTime = Clock.currStdTime;
+								auto masterStartTime = queue.currentWrite.startTime;
+								auto masterSampleCounter = queue.currentWrite.sampleCounter;
+								sampleCounter = masterSampleCounter;
+								auto masterCurrentSampleTime = masterStartTime + cast(size_t)(masterSampleCounter * this.hnsecPerSample);
+								writefln("Current Mastertime = %s", masterCurrentSampleTime);
+								writefln("Current Slavetime = %s", slaveStartTime);
+								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
-							auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-							assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
-							samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
+								assert(currentWireLatency < this.hnsecDelay, format("Network latency too high (%s)", currentWireLatency));
+								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+							}
 						}
-						if ((queue.currentWrite.sampleCounter % 44100) == 0)
+						if ((queue.currentWrite.sampleCounter % 64000) == 0)
 							writefln("Queue size = %s",queue.length);
 						//size_t slaveTime = Clock.currStdTime;
 						//if (slaveTime > queue.currentWrite.masterTime)
 							//writeln("Delay in stream ", slaveTime - queue.currentWrite.masterTime, ", hnsecs (queue ", queue.length, ")");
 						queue.advanceWrite();
-						if (firstRun) {
+						if (firstRun && primeCounter == 0) {
 							Pa_StartStream(stream);
 							firstRun = false;
 						}
