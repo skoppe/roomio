@@ -196,7 +196,6 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 	auto masterTime = masterStartTime + cast(size_t)(masterSampleCounter * hnsecPerSample);
 	assert(slaveTime > masterTime, "Clock out of sync");
 	auto currentWireLatency = slaveTime - masterTime;
-	writeln(currentWireLatency);
 	stats.std.add(cast(double)currentWireLatency);
 }
 
@@ -443,7 +442,7 @@ class OutputPort : Port
 								started = true;
 							}
 						} 
-						if (stats.samples > 2000) {
+						if (stats.samples > 3000) {
 							assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
 						}
 						if ((queue.currentWrite.sampleCounter % 64000) == 0)
