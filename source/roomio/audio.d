@@ -263,6 +263,79 @@ struct Stats {
 		std = RunningStd(memory);
 	}
 }
+
+void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref size_t sampleCounter) {
+	scope(exit) sampleCounter += target.length;
+
+	if (queue.empty) {
+		target[] = 0;
+		return;
+	}
+
+	size_t framesInMessage = queue.currentRead.buffer.length;
+	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
+
+	target[0..framesInMessage - offset] = queue.currentRead.buffer[offset..$];
+	if (offset == 0) {
+		queue.advanceRead();
+		return;
+	}
+
+	queue.advanceRead();
+	if (queue.empty) {
+		target[framesInMessage - offset..$] = 0;
+		return;
+	}
+
+	if (queue.currentRead.sampleCounter != sampleCounter + target.length) {
+		target[framesInMessage - offset..$] = 0;
+		queue.advanceRead();
+		return;
+	}
+
+	target[framesInMessage - offset..$] = queue.currentRead.buffer[0..offset];
+	return;
+}
+
+@("copySamples")
+unittest {
+  auto queue = CircularQueue!(AudioMessage, 6)();
+  short[] target = new short[10];
+  size_t offset = 0;
+  size_t sampleCounter = 0;
+
+  void reset() {
+  	queue.clear();
+	  queue.currentWrite = AudioMessage([0,1,2,3,4,5,6,7,8,9], 0, 0);
+	  queue.advanceWrite();
+	  queue.currentWrite = AudioMessage([9,8,7,6,5,4,3,2,1,0], 0, 10);
+	  queue.advanceWrite();
+  	offset = 0;
+  	sampleCounter = 0;
+  }
+
+  reset();
+  copySamples(queue, target, offset, sampleCounter);
+  target.shouldEqual([0,1,2,3,4,5,6,7,8,9]);
+  sampleCounter.shouldEqual(10);
+  offset.shouldEqual(0);
+  copySamples(queue, target, offset, sampleCounter);
+  target.shouldEqual([9,8,7,6,5,4,3,2,1,0]);
+  sampleCounter.shouldEqual(20);
+  offset.shouldEqual(0);
+
+  reset();
+  offset = 2;
+  copySamples(queue, target, offset, sampleCounter);
+  target.shouldEqual([2,3,4,5,6,7,8,9,9,8]);
+  sampleCounter.shouldEqual(10);
+  offset.shouldEqual(2);
+  copySamples(queue, target, offset, sampleCounter);
+  target.shouldEqual([7,6,5,4,3,2,1,0,0,0]);
+  sampleCounter.shouldEqual(20);
+  offset.shouldEqual(2);
+}
+
 class OutputPort : Port
 {
 	private {
@@ -320,29 +393,7 @@ class OutputPort : Port
 				output[samplesSilence..$] = port.queue.currentRead.buffer[0..messageSamples - samplesSilence];
 				return paContinue;
 			} else {
-				if (port.sampleCounter == messageSampleCounter) {
-					if (port.sampleOffset) {
-						output[0..messageSamples - port.sampleOffset] = port.queue.currentRead.buffer[port.sampleOffset..$];
-						port.queue.advanceRead();
-						port.sampleCounter += 64;
-						if (port.queue.empty) {
-							output[messageSamples - port.sampleOffset..$] = 0;
-							port.sampleOffset = 0;
-							return paContinue;
-						} else {
-							output[messageSamples - port.sampleOffset .. $] = port.queue.currentRead.buffer[0..port.sampleOffset];
-							return paContinue;
-						}
-					}
-					output[0..$] = port.queue.currentRead.buffer[0..$];
-					port.queue.advanceRead();
-					port.sampleCounter += 64;
-					return paContinue;
-				} else {
-					output[0..$] = 0;
-					port.sampleCounter += 64;
-					port.queue.advanceRead();
-				}
+				copySamples(port.queue, output, port.sampleOffset, port.sampleCounter);
 			}
 			return paContinue;
 		}

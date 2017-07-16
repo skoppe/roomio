@@ -51,6 +51,10 @@ struct CircularQueue(Element, size_t Size) {
       return tail + Size - head;
     return tail - head;
   }
+
+  void clear() {
+    atomicStore(tail,head);
+  }
 }
 
 @("CircularQueue")
