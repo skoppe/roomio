@@ -59,7 +59,7 @@ class InputPort : Port
 			tid = runTask({
 				short[64] buffer;
 				long sampleCounter;
-				size_t startTime = Clock.currStdTime;
+				long startTime = Clock.currStdTime;
 				while(running) {
 					Pa_ReadStream(stream, buffer[].ptr, 64);
 					transport.send(AudioMessage(buffer[], startTime, sampleCounter));
@@ -193,17 +193,17 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 	auto slaveTime = Clock.currStdTime;
 	auto masterStartTime = message.startTime;
 	auto masterSampleCounter = message.sampleCounter;
-	auto masterTime = masterStartTime + cast(size_t)(masterSampleCounter * hnsecPerSample);
+	auto masterTime = masterStartTime + cast(long)(masterSampleCounter * hnsecPerSample);
 	assert(slaveTime > masterTime, "Clock out of sync");
 	auto currentWireLatency = slaveTime - masterTime;
 	stats.std.add(cast(double)currentWireLatency);
 }
 
 struct RunningMean {
-	size_t n;
-	size_t memory;
+	long n;
+	long memory;
 	double mean = 0;
-	this(size_t memory = 20) {
+	this(long memory = 20) {
 		this.memory = memory;
 	}
 	void add(double val) {
@@ -216,8 +216,8 @@ struct RunningMean {
 struct RunningStd {
 	RunningMean mean;
 	double[] values;
-	size_t idx;
-	this(size_t memory) {
+	long idx;
+	this(long memory) {
 		mean = RunningMean(memory);
 		values = new double[memory];
 	}
@@ -227,7 +227,7 @@ struct RunningStd {
 		idx = (idx + 1) % values.length;
 	}
 	double getStd() {
-		size_t end = min(mean.n, values.length - 1);
+		long end = min(mean.n, values.length - 1);
 		double sum = 0;
 		double m = mean.mean;
 		foreach(i; 0..end)
@@ -237,7 +237,7 @@ struct RunningStd {
 		return sqrt(sum / end);
 	}
 	double getMax() {
-		size_t end = min(mean.n, values.length - 1);
+		long end = min(mean.n, values.length - 1);
 		double maxValue = 0.0;
 		foreach(i; 0..end)
 			maxValue = max(maxValue, values[i]);
@@ -257,13 +257,13 @@ unittest {
 
 struct Stats {
 	RunningStd std;
-	size_t samples;
-	this(size_t memory) {
+	long samples;
+	this(long memory) {
 		std = RunningStd(memory);
 	}
 }
 
-void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref size_t sampleCounter) {
+void copySamples(Queue)(ref Queue queue, short[] target, long offset, ref long sampleCounter) {
 	scope(exit) sampleCounter += target.length;
 
 	if (queue.empty) {
@@ -271,7 +271,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref size
 		return;
 	}
 
-	size_t framesInMessage = queue.currentRead.buffer.length;
+	long framesInMessage = queue.currentRead.buffer.length;
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
 	target[0..framesInMessage - offset] = queue.currentRead.buffer[offset..$];
@@ -300,8 +300,8 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref size
 unittest {
   auto queue = CircularQueue!(AudioMessage, 6)();
   short[] target = new short[10];
-  size_t offset = 0;
-  size_t sampleCounter = 0;
+  long offset = 0;
+  long sampleCounter = 0;
 
   void reset() {
   	queue.clear();
@@ -344,10 +344,10 @@ class OutputPort : Port
 		Task tid;
 		uint hnsecDelay;
 		double hnsecPerSample;
-		size_t slaveStartTime;
-		size_t sampleCounter;
-		size_t sampleOffset;
-		size_t samplesSilence;
+		long slaveStartTime;
+		long sampleCounter;
+		long sampleOffset;
+		long samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
@@ -372,18 +372,18 @@ class OutputPort : Port
 				output[0..framesPerBuffer] = 0;
 				return paContinue;
 			}
-			//size_t slaveTime = Clock.currStdTime;
+			//long slaveTime = Clock.currStdTime;
 
 			if (statusFlags == paOutputUnderflow) {
 				writeln("Output Underflow");
 			} else if (statusFlags == paOutputOverflow) {
 				writeln("Output Overflow");
 			}
-			size_t messageSamples = port.queue.currentRead.buffer.length;
-			size_t messageSampleCounter = port.queue.currentRead.sampleCounter;
+			long messageSamples = port.queue.currentRead.buffer.length;
+			long messageSampleCounter = port.queue.currentRead.sampleCounter;
 			//writefln("Queue length %s, slave samples %s, master samples %s", port.queue.length, port.sampleCounter, messageSampleCounter);
 			if (port.samplesSilence) {
-				size_t samplesSilence = min(framesPerBuffer, port.samplesSilence);
+				long samplesSilence = min(framesPerBuffer, port.samplesSilence);
 				output[0..samplesSilence] = 0;
 				port.samplesSilence -= samplesSilence;
 				if (samplesSilence == framesPerBuffer)
@@ -426,14 +426,14 @@ class OutputPort : Port
 								auto masterStartTime = queue.currentWrite.startTime;
 								auto masterSampleCounter = queue.currentWrite.sampleCounter;
 								sampleCounter = masterSampleCounter;
-								auto masterCurrentSampleTime = masterStartTime + cast(size_t)(masterSampleCounter * this.hnsecPerSample);
+								auto masterCurrentSampleTime = masterStartTime + cast(long)(masterSampleCounter * this.hnsecPerSample);
 								writefln("Current Mastertime = %s", masterCurrentSampleTime);
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
-								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+								auto samplesOutputLatency = cast(long)(this.outputLatency * this.samplerate);
+								samplesSilence = cast(long)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
 								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
 								samplesSilence -= samplesOutputLatency;
 
