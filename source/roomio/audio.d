@@ -414,7 +414,9 @@ class OutputPort : Port
 						readMessageInPlace(raw.data, queue.currentWrite());
 						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
 						if (!started) {
-							if (stats.samples > 20 && stats.std.getMax < this.hnsecDelay) {
+							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
+								queue.advanceWrite();
+
 								slaveStartTime = Clock.currStdTime;
 								auto masterStartTime = queue.currentWrite.startTime;
 								auto masterSampleCounter = queue.currentWrite.sampleCounter;
@@ -424,13 +426,6 @@ class OutputPort : Port
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
-								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
-								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
-								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
-								samplesSilence -= samplesOutputLatency;
-
-								queue.advanceWrite();
 								auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 								auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
 								auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
@@ -441,6 +436,13 @@ class OutputPort : Port
 									outputLatency = Pa_GetStreamInfo(stream).outputLatency;
 									writefln("Output latency = %s", outputLatency);
 								}
+
+								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
+								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
+								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
+								samplesSilence -= samplesOutputLatency;
+
 								Pa_StartStream(stream);
 								started = true;
 							}
