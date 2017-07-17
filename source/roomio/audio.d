@@ -405,9 +405,6 @@ class OutputPort : Port
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
-						if (queue.full) {
-							continue;
-						}
 						readMessageInPlace(raw.data, queue.currentWrite());
 						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
 						if (!started) {
