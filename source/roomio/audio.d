@@ -199,37 +199,30 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 	stats.std.add(cast(double)currentWireLatency);
 }
 
-struct RunningMean {
-	uint n;
-	uint memory;
-	double mean = 0;
-	this(uint memory = 20) {
-		this.memory = memory;
-	}
-	void add(double val) {
-		if (n < memory)
-			n += 1;
-		mean += (val - mean) / n;
-	}
-}
-
 struct RunningStd {
-	RunningMean mean;
 	double[] values;
+	uint n;
 	uint idx;
 	this(uint memory) {
-		mean = RunningMean(memory);
 		values = new double[memory];
 	}
+	auto mean() {
+		uint end = min(n, values.length - 1);
+		double sum = 0;
+		foreach(i; 0..end)
+			sum += values[i];
+		return sum / end;
+	}
 	void add(double val) {
-		mean.add(val);
+		if (n < values.length)
+			n += 1;
 		values[idx] = val;
 		idx = (idx + 1) % values.length;
 	}
 	double getStd() {
-		uint end = min(mean.n, values.length - 1);
+		uint end = min(n, values.length - 1);
 		double sum = 0;
-		double m = mean.mean;
+		double m = mean;
 		foreach(i; 0..end)
 			sum += (values[i] - m)*(values[i] - m);
 		if (end < 2)
@@ -237,7 +230,7 @@ struct RunningStd {
 		return sqrt(sum / end);
 	}
 	double getMax() {
-		uint end = min(mean.n, values.length - 1);
+		uint end = min(n, values.length - 1);
 		double maxValue = 0.0;
 		foreach(i; 0..end)
 			maxValue = max(maxValue, values[i]);
@@ -252,7 +245,11 @@ unittest {
 	s.add(1.0);
 	s.getStd().shouldEqual(0.0);
 	s.add(5.0);
-	s.mean.mean.shouldEqual(3.0);
+	s.mean.shouldEqual(3.0);
+	s.add(4.0);
+	s.mean.shouldApproxEqual(3.333333);
+	s.add(4.0);
+	s.mean.shouldApproxEqual(3.333333 + (0.666666 / 4.0));
 }
 
 struct Stats {
@@ -446,18 +443,19 @@ class OutputPort : Port
 								Pa_StartStream(stream);
 								started = true;
 							} else {
-								if (queue.full)
-									queue.advanceRead();
-								queue.advanceWrite();
+								if (stats.samples > 3000) {
+									assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean, stats.std.getStd, stats.std.getMax));
+								}
 							}
 						} 
-						if (stats.samples > 3000 && !started) {
-							assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
-						}
 						if ((queue.currentWrite.sampleCounter % 64000) == 0)
-							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean.mean, stats.std.getStd, stats.std.getMax);
-						if (started)
+							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax);
+						if (!queue.full)
 							queue.advanceWrite();
+						else if (!started) {
+							queue.advanceRead();	// we can only advance the read if the stream hasn't started....
+							queue.advanceWrite();
+						}
 						break;
 					default: break;
 				}
