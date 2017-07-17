@@ -200,10 +200,10 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 }
 
 struct RunningMean {
-	long n;
-	long memory;
+	uint n;
+	uint memory;
 	double mean = 0;
-	this(long memory = 20) {
+	this(uint memory = 20) {
 		this.memory = memory;
 	}
 	void add(double val) {
@@ -216,8 +216,8 @@ struct RunningMean {
 struct RunningStd {
 	RunningMean mean;
 	double[] values;
-	long idx;
-	this(long memory) {
+	uint idx;
+	this(uint memory) {
 		mean = RunningMean(memory);
 		values = new double[memory];
 	}
@@ -227,7 +227,7 @@ struct RunningStd {
 		idx = (idx + 1) % values.length;
 	}
 	double getStd() {
-		long end = min(mean.n, values.length - 1);
+		uint end = min(mean.n, values.length - 1);
 		double sum = 0;
 		double m = mean.mean;
 		foreach(i; 0..end)
@@ -237,7 +237,7 @@ struct RunningStd {
 		return sqrt(sum / end);
 	}
 	double getMax() {
-		long end = min(mean.n, values.length - 1);
+		uint end = min(mean.n, values.length - 1);
 		double maxValue = 0.0;
 		foreach(i; 0..end)
 			maxValue = max(maxValue, values[i]);
@@ -257,8 +257,8 @@ unittest {
 
 struct Stats {
 	RunningStd std;
-	long samples;
-	this(long memory) {
+	uint samples;
+	this(uint memory) {
 		std = RunningStd(memory);
 	}
 }
@@ -271,7 +271,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, long offset, ref long s
 		return;
 	}
 
-	long framesInMessage = queue.currentRead.buffer.length;
+	size_t framesInMessage = queue.currentRead.buffer.length;
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
 	target[0..framesInMessage - offset] = queue.currentRead.buffer[offset..$];
@@ -379,11 +379,10 @@ class OutputPort : Port
 			} else if (statusFlags == paOutputOverflow) {
 				writeln("Output Overflow");
 			}
-			long messageSamples = port.queue.currentRead.buffer.length;
-			long messageSampleCounter = port.queue.currentRead.sampleCounter;
-			//writefln("Queue length %s, slave samples %s, master samples %s", port.queue.length, port.sampleCounter, messageSampleCounter);
+			size_t messageSamples = port.queue.currentRead.buffer.length;
+
 			if (port.samplesSilence) {
-				long samplesSilence = min(framesPerBuffer, port.samplesSilence);
+				size_t samplesSilence = cast(size_t)min(framesPerBuffer, port.samplesSilence);
 				output[0..samplesSilence] = 0;
 				port.samplesSilence -= samplesSilence;
 				if (samplesSilence == framesPerBuffer)
