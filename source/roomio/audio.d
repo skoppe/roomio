@@ -442,11 +442,12 @@ class OutputPort : Port
 								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
 								samplesSilence -= samplesOutputLatency;
 
+								writeln("Starting output");
 								Pa_StartStream(stream);
 								started = true;
 							}
 						} 
-						if (stats.samples > 3000) {
+						if (stats.samples > 3000 && !started) {
 							assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean.mean, stats.std.getStd, stats.std.getMax));
 						}
 						if ((queue.currentWrite.sampleCounter % 64000) == 0)
