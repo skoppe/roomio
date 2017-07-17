@@ -445,6 +445,10 @@ class OutputPort : Port
 								writeln("Starting output");
 								Pa_StartStream(stream);
 								started = true;
+							} else {
+								if (queue.full)
+									queue.advanceRead();
+								queue.advanceWrite();
 							}
 						} 
 						if (stats.samples > 3000 && !started) {
