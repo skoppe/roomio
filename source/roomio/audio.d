@@ -263,7 +263,7 @@ struct Stats {
 	}
 }
 
-void copySamples(Queue)(ref Queue queue, short[] target, long offset, ref long sampleCounter) {
+void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long sampleCounter) {
 	scope(exit) sampleCounter += target.length;
 
 	if (queue.empty) {
@@ -300,7 +300,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, long offset, ref long s
 unittest {
   auto queue = CircularQueue!(AudioMessage, 6)();
   short[] target = new short[10];
-  long offset = 0;
+  size_t offset = 0;
   long sampleCounter = 0;
 
   void reset() {
@@ -346,8 +346,8 @@ class OutputPort : Port
 		double hnsecPerSample;
 		long slaveStartTime;
 		long sampleCounter;
-		long sampleOffset;
-		long samplesSilence;
+		size_t sampleOffset;
+		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 64) queue;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
@@ -431,8 +431,8 @@ class OutputPort : Port
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-								auto samplesOutputLatency = cast(long)(this.outputLatency * this.samplerate);
-								samplesSilence = cast(long)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
+								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
+								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
 								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
 								samplesSilence -= samplesOutputLatency;
 
