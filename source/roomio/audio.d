@@ -263,6 +263,12 @@ struct Stats {
 	}
 }
 
+void copyToWithVolume(short[] source, short[] target, double volume = 0.5) {
+	assert(source.length == target.length);
+	foreach(idx; 0..source.length)
+		target[idx] = cast(short)(source[idx] * volume);
+}
+
 void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long sampleCounter) {
 	scope(exit) sampleCounter += target.length;
 
@@ -274,7 +280,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	size_t framesInMessage = queue.currentRead.buffer.length;
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
-	target[0..framesInMessage - offset] = queue.currentRead.buffer[offset..$];
+	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], 0.5);
 	if (offset == 0) {
 		queue.advanceRead();
 		return;
@@ -292,7 +298,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 		return;
 	}
 
-	target[framesInMessage - offset..$] = queue.currentRead.buffer[0..offset];
+	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.5);
 	return;
 }
 
@@ -387,7 +393,7 @@ class OutputPort : Port
 				if (samplesSilence == framesPerBuffer)
 					return paContinue;
 				port.sampleOffset = samplesSilence;
-				output[samplesSilence..$] = port.queue.currentRead.buffer[0..messageSamples - samplesSilence];
+				port.queue.currentRead.buffer[0..messageSamples - samplesSilence].copyToWithVolume(output[samplesSilence..$], 0.5);
 				return paContinue;
 			} else {
 				copySamples(port.queue, output, port.sampleOffset, port.sampleCounter);
