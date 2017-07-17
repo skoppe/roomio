@@ -372,7 +372,6 @@ class OutputPort : Port
 				output[0..framesPerBuffer] = 0;
 				return paContinue;
 			}
-			//long slaveTime = Clock.currStdTime;
 
 			if (statusFlags == paOutputUnderflow) {
 				writeln("Output Underflow");
@@ -394,17 +393,6 @@ class OutputPort : Port
 				copySamples(port.queue, output, port.sampleOffset, port.sampleCounter);
 			}
 			return paContinue;
-		}
-
-		auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
-		auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
-		auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
-		if (result != paNoError) {
-			writeln(Pa_GetErrorText(result).fromStringz);
-		} else
-		{
-			outputLatency = Pa_GetStreamInfo(stream).outputLatency;
-			writefln("Output latency = %s", outputLatency);
 		}
 
 		tid = runTask({
@@ -437,6 +425,16 @@ class OutputPort : Port
 								samplesSilence -= samplesOutputLatency;
 
 								queue.advanceWrite();
+								auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
+								auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
+								auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
+								if (result != paNoError) {
+									writeln(Pa_GetErrorText(result).fromStringz);
+								} else
+								{
+									outputLatency = Pa_GetStreamInfo(stream).outputLatency;
+									writefln("Output latency = %s", outputLatency);
+								}
 								Pa_StartStream(stream);
 								started = true;
 							}
