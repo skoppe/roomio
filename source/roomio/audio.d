@@ -348,9 +348,9 @@ class OutputPort : Port
 		long sampleCounter;
 		size_t sampleOffset;
 		size_t samplesSilence;
-		CircularQueue!(AudioMessage, 64) queue;
+		CircularQueue!(AudioMessage, 172) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 10) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 200) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;

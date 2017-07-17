@@ -104,7 +104,7 @@ void connectPort(ref CliState state) {
 			logInfo("%s) %s - %s", idx+1, p.device.name, p.port.name);
 
 		state.handler = delegate (ref CliState state, const(char[]) entry){
-			int no = parseInt(entry, 1, inputs.length);
+			int no = parseInt(entry, 1, outputs.length);
 			state.handler = createConfirmation(input, outputs[no-1]);
 		};
 	}
