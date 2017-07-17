@@ -415,8 +415,6 @@ class OutputPort : Port
 						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
 						if (!started) {
 							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
-								queue.advanceWrite();
-
 								slaveStartTime = Clock.currStdTime;
 								auto masterStartTime = queue.currentWrite.startTime;
 								auto masterSampleCounter = queue.currentWrite.sampleCounter;
@@ -426,6 +424,7 @@ class OutputPort : Port
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
+								queue.advanceWrite();
 								auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 								auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
 								auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
