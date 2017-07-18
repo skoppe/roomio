@@ -342,13 +342,12 @@ unittest {
 void advanceTillSamplesFromEnd(Queue)(ref Queue queue, long samplesToLag, long masterSampleCounter, ref long sampleCounter, ref size_t sampleOffset) {
 	assert(samplesToLag < masterSampleCounter, "Lag should be bigger than current master sampleCounter");
 	assert(queue.full,"queue should be full");
-	writefln("Setting sample lag to %s samples", samplesToLag);
-	sampleOffset = samplesToLag % 64;
-	samplesToLag -= sampleOffset;
+	sampleOffset = 64 - (samplesToLag % 64);
+	samplesToLag += sampleOffset;
+	writefln("Setting sample lag to %s samples, with offset", samplesToLag, sampleOffset);
 	sampleCounter = masterSampleCounter - samplesToLag;
-	while(samplesToLag > 0) {
+	while(queue.currentRead.sampleCounter != sampleCounter) {
 		queue.advanceRead();
-		samplesToLag -= 64;
 	}
 	assert(queue.currentRead.sampleCounter == sampleCounter, format("queue isn't wound back properly (%s != %s)",queue.currentRead.sampleCounter,sampleCounter));
 	assert(!queue.empty,"queue shouldn't be empty");
@@ -437,8 +436,13 @@ class OutputPort : Port
 									writefln("Output latency = %s", outputLatency);
 								}
 
+								auto timestampToPlayCurrentMessage = masterCurrentSampleTime + hnsecDelay;
+								assert(timestampToPlayCurrentMessage > slaveStartTime, "Lagtime must be larger than latency difference");
+								auto hnsecsToLag = timestampToPlayCurrentMessage - slaveStartTime;
+								auto samplesLatency = cast(long)(outputLatency * samplerate);
+								auto samplesToLag = cast(long)(hnsecsToLag / this.hnsecPerSample) - samplesLatency;
+
 								// since the buffer is full, we need to advance it until it lags precisely hnsecDelay behind master
-								long samplesToLag = cast(long)(this.hnsecDelay / this.hnsecPerSample);
 								queue.advanceTillSamplesFromEnd(samplesToLag, masterSampleCounter, sampleCounter, sampleOffset);
 
 								writeln("Starting output");
