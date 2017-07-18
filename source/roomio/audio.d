@@ -338,6 +338,20 @@ unittest {
   offset.shouldEqual(2);
 }
 
+void advanceTillSamplesFromEnd(Queue)(ref Queue queue, long samplesToLag, long masterSampleCounter, ref long sampleCounter, ref size_t sampleOffset) {
+	assert(samplesToLag < masterSampleCounter, "Lag should be bigger than current master sampleCounter");
+	writefln("Setting sample lag to %s samples", samplesToLag);
+	sampleOffset = samplesToLag % 64;
+	samplesToLag -= sampleOffset;
+	sampleCounter = masterSampleCounter - samplesToLag;
+	while(samplesToLag > 0) {
+		queue.advanceRead();
+		samplesToLag -= 64;
+	}
+	assert(queue.currentRead.sampleCounter == sampleCounter, format("queue isn't wound back properly (%s != %s)",queue.currentRead.sampleCounter,sampleCounter));
+	assert(!queue.empty,"queue shouldn't be empty");
+	assert(!queue.full,"queue shouldn't be full");
+}
 class OutputPort : Port
 {
 	private {
@@ -350,7 +364,6 @@ class OutputPort : Port
 		long slaveStartTime;
 		long sampleCounter;
 		size_t sampleOffset;
-		size_t samplesSilence;
 		CircularQueue!(AudioMessage, 172) queue;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 200) {
@@ -373,6 +386,7 @@ class OutputPort : Port
 			if (port.queue.empty) {
 				// we fill everything with silence
 				output[0..framesPerBuffer] = 0;
+				port.sampleCounter += 64;
 				return paContinue;
 			}
 
@@ -381,20 +395,8 @@ class OutputPort : Port
 			} else if (statusFlags == paOutputOverflow) {
 				writeln("Output Overflow");
 			}
-			size_t messageSamples = port.queue.currentRead.buffer.length;
+			copySamples(port.queue, output, port.sampleOffset, port.sampleCounter);
 
-			if (port.samplesSilence) {
-				size_t samplesSilence = cast(size_t)min(framesPerBuffer, port.samplesSilence);
-				output[0..samplesSilence] = 0;
-				port.samplesSilence -= samplesSilence;
-				if (samplesSilence == framesPerBuffer)
-					return paContinue;
-				port.sampleOffset = samplesSilence;
-				port.queue.currentRead.buffer[0..messageSamples - samplesSilence].copyToWithVolume(output[samplesSilence..$], 0.5);
-				return paContinue;
-			} else {
-				copySamples(port.queue, output, port.sampleOffset, port.sampleCounter);
-			}
 			return paContinue;
 		}
 
@@ -412,7 +414,6 @@ class OutputPort : Port
 								slaveStartTime = Clock.currStdTime;
 								auto masterStartTime = queue.currentWrite.startTime;
 								auto masterSampleCounter = queue.currentWrite.sampleCounter;
-								sampleCounter = masterSampleCounter;
 								auto masterCurrentSampleTime = masterStartTime + cast(long)(masterSampleCounter * this.hnsecPerSample);
 								writefln("Current Mastertime = %s", masterCurrentSampleTime);
 								writefln("Current Slavetime = %s", slaveStartTime);
@@ -430,11 +431,9 @@ class OutputPort : Port
 									writefln("Output latency = %s", outputLatency);
 								}
 
-								auto currentWireLatency = slaveStartTime - masterCurrentSampleTime;
-								auto samplesOutputLatency = cast(size_t)(this.outputLatency * this.samplerate);
-								samplesSilence = cast(size_t)((this.hnsecDelay - currentWireLatency) / this.hnsecPerSample);// the amount of samples of silence to reach desired latency
-								assert(samplesSilence > samplesOutputLatency, "Physical output latency too high");
-								samplesSilence -= samplesOutputLatency;
+								// since the buffer is full, we need to advance it until it lags precisely hnsecDelay behind master
+								long samplesToLag = cast(long)(this.hnsecDelay / this.hnsecPerSample);
+								queue.advanceTillSamplesFromEnd(samplesToLag, masterSampleCounter, sampleCounter, sampleOffset);
 
 								writeln("Starting output");
 								Pa_StartStream(stream);
