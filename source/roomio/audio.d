@@ -257,6 +257,7 @@ struct Stats {
 	uint samples;
 	this(uint memory) {
 		std = RunningStd(memory);
+		samples = 0;
 	}
 }
 
@@ -366,11 +367,14 @@ class OutputPort : Port
 		size_t sampleOffset;
 		CircularQueue!(AudioMessage, 172) queue;
 	}
-	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 200) {
+	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 30) {
 		this.idx = idx;
 		this.hnsecDelay = msDelay * 10_000;
 		this.hnsecPerSample = 10_000_000 / samplerate;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
+		auto samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
+		assert(cast(size_t)(hnsecDelay / hnsecPerSample) < (queue.capacity * 64),"Cannot lag more than buffer");
+		writefln("Going to lag %s% of queue", samplesToLag / 64 / queue.capacity);
 	}
 	override void start(Transport transport)
 	{
