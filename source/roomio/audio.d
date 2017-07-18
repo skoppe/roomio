@@ -341,6 +341,7 @@ unittest {
 
 void advanceTillSamplesFromEnd(Queue)(ref Queue queue, long samplesToLag, long masterSampleCounter, ref long sampleCounter, ref size_t sampleOffset) {
 	assert(samplesToLag < masterSampleCounter, "Lag should be bigger than current master sampleCounter");
+	assert(queue.full,"queue should be full");
 	writefln("Setting sample lag to %s samples", samplesToLag);
 	sampleOffset = samplesToLag % 64;
 	samplesToLag -= sampleOffset;
@@ -374,7 +375,7 @@ class OutputPort : Port
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 		auto samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
 		assert(cast(size_t)(hnsecDelay / hnsecPerSample) < (queue.capacity * 64),"Cannot lag more than buffer");
-		writefln("Going to lag %s% of queue", samplesToLag / 64 / queue.capacity);
+		writefln("Going to lag %s%% of queue", cast(double)(samplesToLag) / 64 / queue.capacity);
 	}
 	override void start(Transport transport)
 	{
@@ -423,6 +424,7 @@ class OutputPort : Port
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
+								queue.advanceRead();
 								queue.advanceWrite();
 								auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 								auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
