@@ -44,6 +44,7 @@ int main(string[] args){
       startCli(transport, deviceList, deviceLatencies);
 
       device.connect();
+
       while(running) {
         transport.acceptMessage();
       }

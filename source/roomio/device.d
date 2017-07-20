@@ -108,9 +108,10 @@ class Device {
   }
   void onMessage(ref LatencyQueryMessage msg) {
     runTask({
+      LatencyQueryMessage clone = msg;
       long randomSleep = uniform(0, 500);
       sleep(randomSleep.msecs);
-      transport.send(LatencyInfoMessage(msg.origin, id, msg.start, randomSleep, Clock.currStdTime));
+      transport.send(LatencyInfoMessage(clone.origin, id, clone.start, randomSleep, Clock.currStdTime));
     });
   }
   void close() {
@@ -184,14 +185,14 @@ class DeviceLatency {
   void onMessage(ref LatencyInfoMessage msg) {
     if (msg.origin != device.id)
       return;
-    double rtt = Clock.currStdTime - msg.sleep - msg.start;
-    if (auto std = msg.device in latencies) {
-      (*std).add(rtt);
+    double rtt = Clock.currStdTime - (msg.sleep * 10000) - msg.start;
+    if (auto stddev = msg.device in latencies) {
+      (*stddev).add(rtt);
     } else
     {
-      auto std = RunningStd(20);
-      std.add(rtt);
-      latencies[msg.device] = std;
+      auto stddev = RunningStd(20);
+      stddev.add(rtt);
+      latencies[msg.device] = stddev;
     }
   }
 }
