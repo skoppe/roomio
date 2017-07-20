@@ -6,14 +6,19 @@ import roomio.connection;
 import roomio.messages;
 import roomio.transport;
 import roomio.testhelpers;
+import roomio.stats;
 import std.meta : staticMap, AliasSeq;
 import std.traits : EnumMembers, Parameters, hasMember;
 import std.uni : toLower;
 import std.algorithm : findSplit, map, find;
 import std.array : array;
 import std.range : empty, front;
+import std.random : uniform;
 
 import vibe.core.log;
+import vibe.core.core;
+import std.datetime : Clock;
+import core.time : msecs;
 
 struct DeviceInfo
 {
@@ -101,6 +106,13 @@ class Device {
     auto connection = connectionRange.front();
     transport.send(LinkReplyMessage(msg.nonce, id, connection.getInfo, LinkStatus.Dead, ""));
   }
+  void onMessage(ref LatencyQueryMessage msg) {
+    runTask({
+      long randomSleep = uniform(0, 500);
+      sleep(randomSleep.msecs);
+      transport.send(LatencyInfoMessage(msg.origin, id, msg.start, randomSleep, Clock.currStdTime));
+    });
+  }
   void close() {
     foreach(c; connections)
       c.kill();
@@ -145,6 +157,41 @@ class DeviceList {
           (*stored).connections[idx] = msg.connection;
       } else
         (*stored).connections = (*stored).connections.remove!(c => msg.connection.id == c.id);
+    }
+  }
+}
+
+class DeviceLatency {
+  private Transport transport;
+  private RunningStd[Id] latencies;
+  private Device device;
+  this(Transport transport, Device device) {
+    this.device = device;
+    this.transport = transport;
+    transport.connect(this);
+    runTask({
+      sleep((500 + uniform(0,2000)).msecs);
+      while(true) {
+        transport.send(LatencyQueryMessage(device.id, Clock.currStdTime));
+        sleep(2000.msecs);
+        sleep(uniform(0,2000).msecs);
+      }
+    });
+  }
+  const(RunningStd[Id]) getLatencies() {
+    return latencies;
+  }
+  void onMessage(ref LatencyInfoMessage msg) {
+    if (msg.origin != device.id)
+      return;
+    double rtt = Clock.currStdTime - msg.sleep - msg.start;
+    if (auto std = msg.device in latencies) {
+      (*std).add(rtt);
+    } else
+    {
+      auto std = RunningStd(20);
+      std.add(rtt);
+      latencies[msg.device] = std;
     }
   }
 }

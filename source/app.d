@@ -39,8 +39,9 @@ int main(string[] args){
       device = new Device(Id.random, Socket.hostName(), transport, ports);
 
       auto deviceList = new DeviceList(transport);
+      auto deviceLatencies = new DeviceLatency(transport, device);
       deviceList.sync();
-      startCli(transport, deviceList);
+      startCli(transport, deviceList, deviceLatencies);
 
       device.connect();
       while(running) {

@@ -27,6 +27,7 @@ alias CliHandler = void delegate(ref CliState, const(char[]) entry);
 struct CliState {
 	Transport transport;
 	DeviceList devices;
+	DeviceLatency latencies;
 	CliHandler handler;
 	bool running = true;
 }
@@ -62,6 +63,18 @@ void listDevices(ref CliState state) {
 			auto source = getPortDevice(connection.source).mapOpt!(t => format("%s:%s", t.device.name, t.port.name)).getOrElse(connection.source.toString);
 			auto target = getPortDevice(connection.target).mapOpt!(t => format("%s:%s", t.device.name, t.port.name)).getOrElse(connection.target.toString);
 			logInfo("\t\t%s -> %s at %s : %s", source, target, connection.host, connection.port);
+		}
+	}
+}
+
+@CliCommand("latencies", "lists devices latencies")
+void listLatencies(ref CliState state) {
+	auto devices = state.devices.getDevices;
+	auto latencies = state.latencies.getLatencies;
+	foreach(device; devices) {
+		if (auto latency = device.id in latencies) {
+			logInfo("Device: %s", device.name);
+			logInfo("	Latency: %s mean, %s stddev, %s local max", latency.mean, latency.getStd, latency.getMax);
 		}
 	}
 }
@@ -191,8 +204,8 @@ void executeCommand(ref CliState state, const(char[]) entry) {
 	}
 }
 
-void startCli(Transport transport, DeviceList devices) {
-	auto state = CliState(transport, devices);
+void startCli(Transport transport, DeviceList devices, DeviceLatency latencies) {
+	auto state = CliState(transport, devices, latencies);
   runTask({
     auto stdin = new StdinStream();
     logInfo("Interactive session started. Type 'help' when you get stuck.");

@@ -138,6 +138,8 @@ struct Dispatcher {
   MessageDelegate!(LinkCommandMessage)[] linkcommand;
   MessageDelegate!(LinkReplyMessage)[] linkreply;
   MessageDelegate!(UnlinkMessage)[] unlink;
+  MessageDelegate!(LatencyQueryMessage)[] latencyquery;
+  MessageDelegate!(LatencyInfoMessage)[] latencyinfo;
   void connect(Device)(Device device) {
     template firstArg(alias fun) {
       alias firstArg = Parameters!fun[0];

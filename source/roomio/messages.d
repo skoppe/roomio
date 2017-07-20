@@ -17,7 +17,9 @@ enum MessageType {
   Unlink,
   Ping,
   Pong,
-  Audio
+  Audio,
+  LatencyQuery,
+  LatencyInfo
 }
 
 struct Header {
@@ -93,6 +95,19 @@ auto readHeader(ubyte[] raw) {
 struct Packet(T) {
   Header header;
   T message;
+}
+
+struct LatencyQueryMessage {
+  Id origin;
+  long start;
+}
+
+struct LatencyInfoMessage {
+  Id origin;
+  Id device;
+  long start; 
+  long sleep;
+  long deviceTime;
 }
 
 size_t calcSize(T)(T item) {
