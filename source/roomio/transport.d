@@ -26,6 +26,7 @@ struct UdpVibeD {
     conn.addMembership(multiaddr);
     conn.canBroadcast = true;
     conn.multicastLoopback = loopback;
+    conn.setDSCP(46);
     addr = resolveHost(ip,AF_INET,false);
     addr.port = targetPort;
   }
