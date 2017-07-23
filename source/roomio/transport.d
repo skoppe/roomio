@@ -14,6 +14,7 @@ import std.algorithm : findSplit;
 import std.array : Appender;
 import core.time : msecs;
 import std.typecons : tuple;
+import core.stdc.errno;
 
 struct UdpVibeD {
   private {
@@ -26,7 +27,12 @@ struct UdpVibeD {
     conn.addMembership(multiaddr);
     conn.canBroadcast = true;
     conn.multicastLoopback = loopback;
-    conn.setDSCP(46);
+    import std.stdio : writefln;
+    try {
+      conn.setDSCP(46);
+      } catch (Exception e) {
+        writefln("%s: %s", e.msg, errno);
+      }
     addr = resolveHost(ip,AF_INET,false);
     addr.port = targetPort;
   }
