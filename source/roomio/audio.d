@@ -63,6 +63,8 @@ class InputPort : Port
 				long startTime = Clock.currStdTime;
 				while(running) {
 					Pa_ReadStream(stream, buffer[].ptr, 64);
+					if ((sampleCounter % 64000) == 0)
+						writefln("sample = %s",buffer[0]);
 					transport.send(AudioMessage(buffer[], startTime, sampleCounter));
 					sampleCounter += 64;
 					yield();
@@ -226,7 +228,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	size_t framesInMessage = queue.currentRead.buffer.length;
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
-	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], 0.5);
+	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], 0.75);
 	if (offset == 0) {
 		queue.advanceRead();
 		return;
@@ -244,7 +246,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 		return;
 	}
 
-	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.5);
+	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.75);
 	return;
 }
 
@@ -334,6 +336,8 @@ class OutputPort : Port
 		                             PaStreamCallbackFlags statusFlags,
 		                             void *userData) {
 			OutputPort port = cast(OutputPort)(userData);
+			if ((queue.currentRead.sampleCounter % 64000) == 0)
+				writefln("sample = %s",queue.currentRead.buffer[0]);
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
 				// we fill everything with silence
