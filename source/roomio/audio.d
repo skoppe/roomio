@@ -337,7 +337,7 @@ class OutputPort : Port
 		                             void *userData) {
 			OutputPort port = cast(OutputPort)(userData);
 			if ((port.queue.currentRead.sampleCounter % 64000) == 0)
-				writefln("sample = %s",port.queue.currentRead.buffer[0]);
+				writeln("sample = ",port.queue.currentRead.buffer[0]);
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
 				// we fill everything with silence
