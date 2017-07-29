@@ -336,8 +336,8 @@ class OutputPort : Port
 		                             PaStreamCallbackFlags statusFlags,
 		                             void *userData) {
 			OutputPort port = cast(OutputPort)(userData);
-			if ((queue.currentRead.sampleCounter % 64000) == 0)
-				writefln("sample = %s",queue.currentRead.buffer[0]);
+			if ((port.queue.currentRead.sampleCounter % 64000) == 0)
+				writefln("sample = %s",port.queue.currentRead.buffer[0]);
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
 				// we fill everything with silence
