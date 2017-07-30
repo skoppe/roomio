@@ -79,6 +79,18 @@ void listLatencies(ref CliState state) {
 	}
 }
 
+@CliCommand("deviations", "lists devices sync deviations")
+void listDeviations(ref CliState state) {
+	auto devices = state.devices.getDevices;
+	auto latencies = state.latencies.getDeviations;
+	foreach(device; devices) {
+		if (auto latency = device.id in latencies) {
+			logInfo("Device: %s", device.name);
+			logInfo("	Deviation: %s mean, %s stddev, %s local max", latency.mean, latency.getStd, latency.getMax);
+		}
+	}
+}
+
 @CliCommand("connect", "Connect one port to another")
 void connectPort(ref CliState state) {
 

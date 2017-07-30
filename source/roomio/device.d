@@ -165,6 +165,7 @@ class DeviceList {
 class DeviceLatency {
   private Transport transport;
   private RunningStd[Id] latencies;
+  private RunningStd[Id] deviations;
   private Device device;
   this(Transport transport, Device device) {
     this.device = device;
@@ -182,17 +183,27 @@ class DeviceLatency {
   const(RunningStd[Id]) getLatencies() {
     return latencies;
   }
+  const(RunningStd[Id]) getDeviations() {
+    return deviations;
+  }
   void onMessage(ref LatencyInfoMessage msg) {
     if (msg.origin != device.id)
       return;
-    double rtt = Clock.currStdTime - (msg.sleep * 10000) - msg.start;
+    double current = Clock.currStdTime;
+    double hnsecSleep = (msg.sleep * 10000);
+    double rtt = current - hnsecSleep - msg.start;
+    double deviation = msg.deviceTime - hnsecSleep - (msg.start + rtt / 2);
     if (auto stddev = msg.device in latencies) {
       (*stddev).add(rtt);
+      deviations[msg.device].add(deviation);
     } else
     {
       auto stddev = RunningStd(20);
       stddev.add(rtt);
       latencies[msg.device] = stddev;
+      auto devs = RunningStd(20);
+      devs.add(deviation);
+      deviations[msg.device] = devs;
     }
   }
 }
