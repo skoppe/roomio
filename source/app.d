@@ -41,6 +41,8 @@ int main(string[] args){
       auto deviceList = new DeviceList(transport);
       auto deviceLatencies = new DeviceLatency(transport, device);
       deviceList.sync();
+
+      // todo: better to create a register cli command function
       startCli(transport, deviceList, deviceLatencies);
 
       device.connect();

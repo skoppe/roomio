@@ -170,14 +170,14 @@ class DeviceLatency {
     this.device = device;
     this.transport = transport;
     transport.connect(this);
-    //runTask({
-    //  sleep((500 + uniform(0,2000)).msecs);
-    //  while(true) {
-    //    transport.send(LatencyQueryMessage(device.id, Clock.currStdTime));
-    //    sleep(2000.msecs);
-    //    sleep(uniform(0,2000).msecs);
-    //  }
-    //});
+    runTask({
+      sleep((500 + uniform(0,2000)).msecs);
+      while(true) {
+        transport.send(LatencyQueryMessage(device.id, Clock.currStdTime));
+        sleep(2000.msecs);
+        sleep(uniform(0,2000).msecs);
+      }
+    });
   }
   const(RunningStd[Id]) getLatencies() {
     return latencies;
