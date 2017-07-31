@@ -400,7 +400,7 @@ class OutputPort : Port
 						{
 							// received later message earlier
 							long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
-							long slotsAhead = samplesTooEarly / 64;
+							size_t slotsAhead = cast(size_t)(samplesTooEarly / 64);
 							if (queue.canWriteAhead(slotsAhead))
 								readMessageInPlace(raw.data, queue.writeAhead(slotsAhead));
 							// queue.silenceCurrentWrite();
@@ -410,7 +410,7 @@ class OutputPort : Port
 					  {
 					  	// received earlier message later
 							long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
-							long slotsBehind = samplesTooLate / 64;
+							size_t slotsBehind = cast(size_t)(samplesTooLate / 64);
 							if (queue.canWriteBehind(slotsBehind))
 								readMessageInPlace(raw.data, queue.writeBehind(slotsBehind));
 						} else
