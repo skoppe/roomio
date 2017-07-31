@@ -65,7 +65,7 @@ class InputPort : Port
 					Pa_ReadStream(stream, buffer[].ptr, 64);
 					if ((sampleCounter % 64000) == 0)
 						writefln("sample = %s",buffer[0]);
-					transport.send(AudioMessage(buffer[], startTime, sampleCounter));
+					transport.send(AudioMessage(startTime, sampleCounter, buffer[]));
 					sampleCounter += 64;
 					yield();
 				}
@@ -387,12 +387,39 @@ class OutputPort : Port
 			bool started = false;
 			Stats stats = Stats(20);
 			long samplesReceived;
+			AudioMessageHeader audioHeader;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
-						readMessageInPlace(raw.data, queue.currentWrite());
-						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
+						readMessageInPlace(raw.data, audioHeader);
+						if (samplesReceived == 0)
+							samplesReceived = audioHeader.sampleCounter;
+
+						if (samplesReceived < audioHeader.sampleCounter)
+						{
+							// received later message earlier
+							long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
+							long slotsAhead = samplesTooEarly / 64;
+							if (queue.canWriteAhead(slotsAhead))
+								readMessageInPlace(raw.data, queue.writeAhead(slotsAhead));
+							// queue.silenceCurrentWrite();
+							// Otherwise??? TROUBLE!!
+							// We have to keep the buffer larger than the most out of order message...
+					  } else if (samplesReceived > audioHeader.sampleCounter)
+					  {
+					  	// received earlier message later
+							long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
+							long slotsBehind = samplesTooLate / 64;
+							if (queue.canWriteBehind(slotsBehind))
+								readMessageInPlace(raw.data, queue.writeBehind(slotsBehind));
+						} else
+						{
+							// received in correct order
+							readMessageInPlace(raw.data, queue.currentWrite());
+							calcStats(queue.currentWrite, stats, this.hnsecPerSample);
+						}
+
 						if (samplesReceived != queue.currentWrite.sampleCounter)
 						{
 							writefln("Got out-of-band audio message (%s != %s)", samplesReceived, queue.currentWrite.sampleCounter);

@@ -83,7 +83,12 @@ struct UnlinkMessage {
 }
 
 struct AudioMessage {
+  long startTime;
+  long sampleCounter;
   short[] buffer;
+}
+
+struct AudioMessageHeader {
   long startTime;
   long sampleCounter;
 }

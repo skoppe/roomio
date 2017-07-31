@@ -59,6 +59,26 @@ struct CircularQueue(Element, size_t Size) {
   auto capacity() {
     return Size;
   }
+
+  bool canWriteAhead(size_t ahead) {
+    size_t pos = (tail + ahead) % Size;
+    return head > pos;
+  }
+
+  bool canWriteBehind(size_t behind) {
+    return length > behind;
+  }
+
+  ref Element writeAhead(size_t ahead) {
+    size_t pos = (tail + ahead) % Size;
+    return data[pos];
+  }
+
+  ref Element writeBehind(size_t behind) {
+    if (behind > tail)
+      return data[tail + Size - behind];
+    return data[tail - behind];
+  }
 }
 
 @("CircularQueue")
