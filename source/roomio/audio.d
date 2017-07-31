@@ -25,14 +25,6 @@ import roomio.testhelpers;
 
 private shared PaError initStatus;
 
-version( CRuntime_Glibc )
-{
-	pragma(msg, "glibc");
-} else version ( linux )
-{
-	pragma(msg, "linux");
-}
-
 shared static this() {
 	initStatus = Pa_Initialize();
 }
@@ -297,20 +289,47 @@ unittest {
   offset.shouldEqual(2);
 }
 
-void advanceTillSamplesFromEnd(Queue)(ref Queue queue, long samplesToLag, long masterSampleCounter, ref long sampleCounter, ref size_t sampleOffset) {
-	assert(samplesToLag < masterSampleCounter, "Lag should be bigger than current master sampleCounter");
-	assert(queue.full,"queue should be full");
-	sampleOffset = 64 - (samplesToLag % 64);
-	samplesToLag += sampleOffset;
-	writefln("Setting sample lag to %s samples, with offset", samplesToLag, sampleOffset);
-	sampleCounter = masterSampleCounter - samplesToLag;
-	while(queue.currentRead.sampleCounter != sampleCounter) {
+void advanceTillSamplesFromEnd(Queue, size_t)(ref Queue queue, long samplesToLag, long masterSampleCounter, ref long sampleCounter, ref size_t sampleOffset) {
+	assert(samplesToLag < masterSampleCounter, "Lag should be smaller than current master sampleCounter");
+	assert(!queue.empty,"queue shouldn't be empty");
+
+	long samplesStart = masterSampleCounter - samplesToLag;
+	sampleOffset = samplesStart - queue.currentRead.sampleCounter;
+	writefln("Skipping %s samples", sampleOffset);
+
+	while(sampleOffset > queue.currentRead.buffer.length) {
+		sampleOffset -= queue.currentRead.buffer.length;
 		queue.advanceRead();
 	}
-	assert(queue.currentRead.sampleCounter == sampleCounter, format("queue isn't wound back properly (%s != %s)",queue.currentRead.sampleCounter,sampleCounter));
+	sampleCounter = queue.currentRead.sampleCounter;
 	assert(!queue.empty,"queue shouldn't be empty");
 	assert(!queue.full,"queue shouldn't be full");
 }
+
+@("advanceTillSamplesFromEnd")
+unittest
+{
+	auto queue = CircularQueue!(AudioMessage, 6)();
+	queue.currentWrite = AudioMessage([0,1,2,3,4,5,6,7,8,9], 0, 0);
+	queue.advanceWrite();
+	queue.currentWrite = AudioMessage([9,8,7,6,5,4,3,2,1,0], 0, 10);
+	queue.advanceWrite();
+
+	long sampleCounter;
+	size_t sampleOffset;
+	advanceTillSamplesFromEnd(queue, 4, 10, sampleCounter, sampleOffset);
+
+	sampleCounter.shouldEqual(0);
+	sampleOffset.shouldEqual(6);
+	queue.length.shouldEqual(2);
+
+	advanceTillSamplesFromEnd(queue, 4, 20, sampleCounter, sampleOffset);
+
+	sampleCounter.shouldEqual(10);
+	sampleOffset.shouldEqual(6);
+	queue.length.shouldEqual(1);
+}
+
 class OutputPort : Port
 {
 	private {
@@ -349,6 +368,7 @@ class OutputPort : Port
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
 				// we fill everything with silence
+				writeln("empty queue");
 				output[0..framesPerBuffer] = 0;
 				port.sampleCounter += 64;
 				return paContinue;

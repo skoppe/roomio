@@ -3,6 +3,8 @@ module roomio.stats;
 import std.algorithm : min, max;
 import std.math : sqrt;
 
+import roomio.testhelpers;
+
 struct RunningStd {
 	double[] values;
 	uint n;
