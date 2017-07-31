@@ -25,6 +25,14 @@ import roomio.testhelpers;
 
 private shared PaError initStatus;
 
+version( CRuntime_Glibc )
+{
+	pragma(msg, "glibc");
+} else version ( linux )
+{
+	pragma(msg, "linux");
+}
+
 shared static this() {
 	initStatus = Pa_Initialize();
 }
