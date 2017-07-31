@@ -294,7 +294,7 @@ void advanceTillSamplesFromEnd(Queue, size_t)(ref Queue queue, long samplesToLag
 	assert(!queue.empty,"queue shouldn't be empty");
 
 	long samplesStart = masterSampleCounter - samplesToLag;
-	sampleOffset = samplesStart - queue.currentRead.sampleCounter;
+	sampleOffset = cast(size_t)(samplesStart - queue.currentRead.sampleCounter);
 	writefln("Skipping %s samples", sampleOffset);
 
 	while(sampleOffset > queue.currentRead.buffer.length) {
