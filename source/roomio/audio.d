@@ -295,7 +295,7 @@ void advanceTillSamplesFromEnd(Queue, size_t)(ref Queue queue, long samplesToLag
 
 	long samplesStart = masterSampleCounter - samplesToLag;
 	sampleOffset = cast(size_t)(samplesStart - queue.currentRead.sampleCounter);
-	writefln("Skipping %s samples", sampleOffset);
+	writefln("Skipping %s samples (lagging %s)", sampleOffset, samplesToLag);
 
 	while(sampleOffset > queue.currentRead.buffer.length) {
 		sampleOffset -= queue.currentRead.buffer.length;
@@ -368,7 +368,6 @@ class OutputPort : Port
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
 			if (port.queue.empty) {
 				// we fill everything with silence
-				writeln("empty queue");
 				output[0..framesPerBuffer] = 0;
 				port.sampleCounter += 64;
 				return paContinue;
@@ -387,12 +386,18 @@ class OutputPort : Port
 		tid = runTask({
 			bool started = false;
 			Stats stats = Stats(20);
+			long samplesReceived;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
 						readMessageInPlace(raw.data, queue.currentWrite());
 						calcStats(queue.currentWrite, stats, this.hnsecPerSample);
+						if (samplesReceived != queue.currentWrite.sampleCounter)
+						{
+							writefln("Got out-of-band audio message (%s != %s)", samplesReceived, queue.currentWrite.sampleCounter);
+						}
+						samplesReceived = queue.currentWrite.sampleCounter + queue.currentWrite.buffer.length;
 						if (!started) {
 							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
 								slaveStartTime = Clock.currStdTime;
