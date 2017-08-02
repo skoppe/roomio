@@ -243,9 +243,9 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 
 	if (queue.currentRead.sampleCounter != sampleCounter + target.length) {
 		assert(false, "this can never happen");
-		target[framesInMessage - offset..$] = 0;
-		queue.advanceRead();
-		return;
+		//target[framesInMessage - offset..$] = 0;
+		//queue.advanceRead();
+		//return;
 	}
 
 	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.75);
@@ -368,7 +368,7 @@ class OutputPort : Port
 			if ((port.queue.currentRead.sampleCounter % 64000) == 0)
 				writeln("sample = ",port.queue.currentRead.buffer[0]);
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
-			if (port.queue.empty || port.currentRead.played) {
+			if (port.queue.empty || port.queue.currentRead.played) {
 				// we fill everything with silence
 				output[0..framesPerBuffer] = 0;
 				port.sampleCounter += 64;
