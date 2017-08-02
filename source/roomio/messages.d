@@ -86,6 +86,7 @@ struct AudioMessage {
   long startTime;
   long sampleCounter;
   short[] buffer;
+  @NoCereal bool played;
 }
 
 struct AudioMessageHeader {

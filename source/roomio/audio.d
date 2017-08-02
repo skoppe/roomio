@@ -229,6 +229,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
 	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], 0.75);
+	queue.currentRead.played = true;
 	if (offset == 0) {
 		queue.advanceRead();
 		return;
@@ -241,6 +242,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	}
 
 	if (queue.currentRead.sampleCounter != sampleCounter + target.length) {
+		assert(false, "this can never happen");
 		target[framesInMessage - offset..$] = 0;
 		queue.advanceRead();
 		return;
@@ -366,7 +368,7 @@ class OutputPort : Port
 			if ((port.queue.currentRead.sampleCounter % 64000) == 0)
 				writeln("sample = ",port.queue.currentRead.buffer[0]);
 			short[] output = (cast(short*)outputBuffer)[0..framesPerBuffer];
-			if (port.queue.empty) {
+			if (port.queue.empty || port.currentRead.played) {
 				// we fill everything with silence
 				output[0..framesPerBuffer] = 0;
 				port.sampleCounter += 64;
@@ -402,29 +404,29 @@ class OutputPort : Port
 							long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
 							size_t slotsAhead = cast(size_t)(samplesTooEarly / 64);
 							if (queue.canWriteAhead(slotsAhead))
+							{
+								queue.writeAhead(slotsAhead).played = false;
 								readMessageInPlace(raw.data, queue.writeAhead(slotsAhead));
-							// queue.silenceCurrentWrite();
-							// Otherwise??? TROUBLE!!
-							// We have to keep the buffer larger than the most out of order message...
+								samplesReceived = audioHeader.sampleCounter + 64;
+							}
 					  } else if (samplesReceived > audioHeader.sampleCounter)
 					  {
 					  	// received earlier message later
 							long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
 							size_t slotsBehind = cast(size_t)(samplesTooLate / 64);
-							if (queue.canWriteBehind(slotsBehind))
+							if (queue.canWriteBehind(slotsBehind)) {
+								queue.writeBehind(slotsBehind).played = false;
 								readMessageInPlace(raw.data, queue.writeBehind(slotsBehind));
+							}
 						} else
 						{
 							// received in correct order
 							readMessageInPlace(raw.data, queue.currentWrite());
 							calcStats(queue.currentWrite, stats, this.hnsecPerSample);
+							queue.currentWrite.played = false;
+							samplesReceived += 64;
 						}
 
-						if (samplesReceived != queue.currentWrite.sampleCounter)
-						{
-							writefln("Got out-of-band audio message (%s != %s)", samplesReceived, queue.currentWrite.sampleCounter);
-						}
-						samplesReceived = queue.currentWrite.sampleCounter + queue.currentWrite.buffer.length;
 						if (!started) {
 							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
 								slaveStartTime = Clock.currStdTime;
