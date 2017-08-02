@@ -242,10 +242,9 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	}
 
 	if (queue.currentRead.sampleCounter != sampleCounter + target.length) {
-		assert(false, "this can never happen");
-		//target[framesInMessage - offset..$] = 0;
-		//queue.advanceRead();
-		//return;
+		target[framesInMessage - offset..$] = 0;
+		queue.advanceRead();
+		return;
 	}
 
 	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.75);
@@ -408,7 +407,9 @@ class OutputPort : Port
 								queue.writeAhead(slotsAhead).played = false;
 								readMessageInPlace(raw.data, queue.writeAhead(slotsAhead));
 								samplesReceived = audioHeader.sampleCounter + 64;
+								queue.advanceWrite(1 + slotsAhead);
 							}
+							continue;
 					  } else if (samplesReceived > audioHeader.sampleCounter)
 					  {
 					  	// received earlier message later
@@ -418,6 +419,7 @@ class OutputPort : Port
 								queue.writeBehind(slotsBehind).played = false;
 								readMessageInPlace(raw.data, queue.writeBehind(slotsBehind));
 							}
+							continue;
 						} else
 						{
 							// received in correct order

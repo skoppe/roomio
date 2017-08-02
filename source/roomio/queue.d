@@ -9,8 +9,8 @@ struct CircularQueue(Element, size_t Size) {
     Element[Size] data;
     shared size_t tail; // points to end of queue
     shared size_t head; // points to start of queue
-    size_t incr(size_t pos) pure const {
-      return (pos + 1) % Size;
+    size_t incr(size_t pos, size_t amount) pure const {
+      return (pos + amount) % Size;
     }
   }
 
@@ -30,22 +30,22 @@ struct CircularQueue(Element, size_t Size) {
     return data[head];
   }
 
-  void advanceRead() {
+  void advanceRead(size_t amount = 1) {
     assert(!empty);
-    atomicStore(head,incr(head));
+    atomicStore(head,incr(head, amount));
   }
 
   ref Element currentWrite() {
     return data[tail];
   }
 
-  void advanceWrite() {
+  void advanceWrite(size_t amount = 1) {
     assert(!full);
-    atomicStore(tail,incr(tail));
+    atomicStore(tail,incr(tail, amount));
   }
 
   bool empty() pure const { return tail == head; }
-  bool full() pure const { return incr(tail) == head; }
+  bool full() pure const { return incr(tail, 1) == head; }
   size_t length() pure const {
     if (tail < head)
       return tail + Size - head;
