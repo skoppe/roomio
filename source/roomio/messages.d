@@ -258,7 +258,7 @@ unittest {
   import roomio.port;
 
   auto app = appender!(ubyte[]);
-  writeMessage(AudioMessage([5,6,7,8,9], 55, 66), app);
+  writeMessage(AudioMessage(55, 66, [5,6,7,8,9]), app);
 
   auto raw = app.data;
   AudioMessage am;

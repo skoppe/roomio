@@ -17,13 +17,13 @@ struct CircularQueue(Element, size_t Size) {
   void pop(Args...)(void function (ref Element, Args) @nogc fun, Args args) @nogc {
     assert(!empty);
     fun(data[head], args);
-    atomicStore(head,incr(head));
+    atomicStore(head,incr(head, 1));
   }
 
   void push(Args...)(void function (ref Element, Args) fun, Args args) {
     assert(!full);
     fun(data[tail],args);
-    atomicStore(tail,incr(tail));
+    atomicStore(tail,incr(tail, 1));
   }
 
   ref Element currentRead() {
@@ -61,10 +61,7 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   bool canWriteAhead(size_t ahead) {
-    if (ahead > Size - 1)
-      return false;
-    size_t pos = (tail + ahead) % Size;
-    return head > pos;
+    return length + ahead < Size - 1;
   }
 
   bool canWriteBehind(size_t behind) {

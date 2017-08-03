@@ -260,9 +260,9 @@ unittest {
 
   void reset() {
   	queue.clear();
-	  queue.currentWrite = AudioMessage([0,1,2,3,4,5,6,7,8,9], 0, 0);
+	  queue.currentWrite = AudioMessage(0, 0, [0,1,2,3,4,5,6,7,8,9]);
 	  queue.advanceWrite();
-	  queue.currentWrite = AudioMessage([9,8,7,6,5,4,3,2,1,0], 0, 10);
+	  queue.currentWrite = AudioMessage(0, 10, [9,8,7,6,5,4,3,2,1,0]);
 	  queue.advanceWrite();
   	offset = 0;
   	sampleCounter = 0;
@@ -311,9 +311,9 @@ void advanceTillSamplesFromEnd(Queue, size_t)(ref Queue queue, long samplesToLag
 unittest
 {
 	auto queue = CircularQueue!(AudioMessage, 6)();
-	queue.currentWrite = AudioMessage([0,1,2,3,4,5,6,7,8,9], 0, 0);
+	queue.currentWrite = AudioMessage(0, 0, [0,1,2,3,4,5,6,7,8,9]);
 	queue.advanceWrite();
-	queue.currentWrite = AudioMessage([9,8,7,6,5,4,3,2,1,0], 0, 10);
+	queue.currentWrite = AudioMessage(0, 10, [9,8,7,6,5,4,3,2,1,0]);
 	queue.advanceWrite();
 
 	long sampleCounter;
@@ -329,6 +329,70 @@ unittest
 	sampleCounter.shouldEqual(10);
 	sampleOffset.shouldEqual(6);
 	queue.length.shouldEqual(1);
+}
+
+AudioMessage* placeMessage(Queue)(ref Queue queue, const (ubyte[]) raw, ref long samplesReceived, long sampleSize) {
+	AudioMessageHeader audioHeader;
+
+	readMessageInPlace(raw, audioHeader);
+	if (samplesReceived == 0)
+		samplesReceived = audioHeader.sampleCounter;
+
+	if (samplesReceived < audioHeader.sampleCounter)
+	{
+		// received later message earlier
+		long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
+		size_t slotsAhead = cast(size_t)(samplesTooEarly / sampleSize);
+		if (!queue.canWriteAhead(slotsAhead))
+			return null;
+
+		queue.writeAhead(slotsAhead).played = false;
+		readMessageInPlace(raw, queue.writeAhead(slotsAhead));
+		samplesReceived = audioHeader.sampleCounter + sampleSize;
+		AudioMessage* msg = &queue.writeAhead(slotsAhead);
+		queue.advanceWrite(1 + slotsAhead);
+		return msg;
+  } else if (samplesReceived > audioHeader.sampleCounter)
+  {
+  	// received earlier message later
+		long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
+		size_t slotsBehind = cast(size_t)(samplesTooLate / sampleSize);
+		if (!queue.canWriteBehind(slotsBehind))
+			return null;
+
+		queue.writeBehind(slotsBehind).played = false;
+		readMessageInPlace(raw, queue.writeBehind(slotsBehind));
+		return &queue.writeBehind(slotsBehind);
+	}
+	// received in correct order
+	readMessageInPlace(raw, queue.currentWrite());
+	queue.currentWrite.played = false;
+	AudioMessage* msg = &queue.currentWrite();
+	samplesReceived += sampleSize;
+  queue.advanceWrite();
+	return msg;
+}
+
+unittest {
+	auto queue = CircularQueue!(AudioMessage, 6)();
+	long samplesReceived = 0;
+	queue.placeMessage(AudioMessage(0, 0, [0,1,2,3,4,5,6,7,8,9]).serialize, samplesReceived, 10);
+	queue.placeMessage(AudioMessage(0, 10, [10,11,12,13,14,15,16,17,18,19]).serialize, samplesReceived, 10);
+	queue.placeMessage(AudioMessage(0, 30, [30,31,32,33,34,35,36,37,38,39]).serialize, samplesReceived, 10);
+	queue.placeMessage(AudioMessage(0, 20, [20,21,22,23,24,25,26,27,28,29]).serialize, samplesReceived, 10);
+	queue.placeMessage(AudioMessage(0, 40, [40,41,42,43,44,45,46,47,48,49]).serialize, samplesReceived, 10);
+
+	queue.currentRead.buffer.shouldEqual([0,1,2,3,4,5,6,7,8,9]);
+	queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([10,11,12,13,14,15,16,17,18,19]);
+	queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([20,21,22,23,24,25,26,27,28,29]);
+	queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([30,31,32,33,34,35,36,37,38,39]);
+	queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([40,41,42,43,44,45,46,47,48,49]);
+	queue.advanceRead();
+	queue.empty.shouldEqual(true);
 }
 
 class OutputPort : Port
@@ -388,59 +452,27 @@ class OutputPort : Port
 			bool started = false;
 			Stats stats = Stats(20);
 			long samplesReceived;
-			AudioMessageHeader audioHeader;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
 					case MessageType.Audio:
-						readMessageInPlace(raw.data, audioHeader);
-						if (samplesReceived == 0)
-							samplesReceived = audioHeader.sampleCounter;
+						AudioMessage* msg = queue.placeMessage(raw.data, samplesReceived, 64);
+						if (msg is null)
+							continue;
 
-						if (samplesReceived < audioHeader.sampleCounter)
-						{
-							// received later message earlier
-							long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
-							size_t slotsAhead = cast(size_t)(samplesTooEarly / 64);
-							if (queue.canWriteAhead(slotsAhead))
-							{
-								queue.writeAhead(slotsAhead).played = false;
-								readMessageInPlace(raw.data, queue.writeAhead(slotsAhead));
-								samplesReceived = audioHeader.sampleCounter + 64;
-								queue.advanceWrite(1 + slotsAhead);
-							}
-							continue;
-					  } else if (samplesReceived > audioHeader.sampleCounter)
-					  {
-					  	// received earlier message later
-							long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
-							size_t slotsBehind = cast(size_t)(samplesTooLate / 64);
-							if (queue.canWriteBehind(slotsBehind)) {
-								queue.writeBehind(slotsBehind).played = false;
-								readMessageInPlace(raw.data, queue.writeBehind(slotsBehind));
-							}
-							continue;
-						} else
-						{
-							// received in correct order
-							readMessageInPlace(raw.data, queue.currentWrite());
-							calcStats(queue.currentWrite, stats, this.hnsecPerSample);
-							queue.currentWrite.played = false;
-							samplesReceived += 64;
-						}
+						calcStats(*msg, stats, this.hnsecPerSample);
 
 						if (!started) {
 							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
 								slaveStartTime = Clock.currStdTime;
-								auto masterStartTime = queue.currentWrite.startTime;
-								auto masterSampleCounter = queue.currentWrite.sampleCounter;
+								auto masterStartTime = msg.startTime;
+								auto masterSampleCounter = msg.sampleCounter;
 								auto masterCurrentSampleTime = masterStartTime + cast(long)(masterSampleCounter * this.hnsecPerSample);
 								writefln("Current Mastertime = %s", masterCurrentSampleTime);
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
 
 								queue.advanceRead();
-								queue.advanceWrite();
 								auto outputDeviceInfo = Pa_GetDeviceInfo(idx);
 								auto outputParams = PaStreamParameters(idx, cast(int)channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
 								auto result = Pa_OpenStream(&stream, null, &outputParams, samplerate, 64, 0, &callback, cast(void*)this );
@@ -470,13 +502,10 @@ class OutputPort : Port
 								}
 							}
 						} 
-						if ((queue.currentWrite.sampleCounter % 64000) == 0)
+						if ((msg.sampleCounter % 64000) == 0)
 							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax);
-						if (!queue.full)
-							queue.advanceWrite();
-						else if (!started) {
+						if (queue.full && !started) {
 							queue.advanceRead();	// we can only advance the read if the stream hasn't started....
-							queue.advanceWrite();
 						}
 						break;
 					default: break;
