@@ -205,6 +205,7 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 struct Stats {
 	RunningStd std;
 	uint samples;
+	uint inOrder, outOfOrder;
 	this(uint memory) {
 		std = RunningStd(memory);
 		samples = 0;
@@ -217,7 +218,7 @@ void copyToWithVolume(short[] source, short[] target, double volume = 0.5) {
 		target[idx] = cast(short)(source[idx] * volume);
 }
 
-void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long sampleCounter) {
+void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long sampleCounter, double volume = 1.0) {
 	scope(exit) sampleCounter += target.length;
 
 	if (queue.empty) {
@@ -228,7 +229,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 	size_t framesInMessage = queue.currentRead.buffer.length;
 	assert(framesInMessage == target.length,"Currently all buffers must be of same size");
 
-	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], 0.75);
+	queue.currentRead.buffer[offset..$].copyToWithVolume(target[0..framesInMessage - offset], volume);
 	queue.currentRead.played = true;
 	if (offset == 0) {
 		queue.advanceRead();
@@ -247,7 +248,7 @@ void copySamples(Queue)(ref Queue queue, short[] target, size_t offset, ref long
 		return;
 	}
 
-	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], 0.75);
+	queue.currentRead.buffer[0..offset].copyToWithVolume(target[framesInMessage - offset..$], volume);
 	return;
 }
 
@@ -343,8 +344,10 @@ AudioMessage* placeMessage(Queue)(ref Queue queue, const (ubyte[]) raw, ref long
 		// received later message earlier
 		long samplesTooEarly = audioHeader.sampleCounter - samplesReceived;
 		size_t slotsAhead = cast(size_t)(samplesTooEarly / sampleSize);
-		if (!queue.canWriteAhead(slotsAhead))
+		if (!queue.canWriteAhead(slotsAhead)) {
+			//samplesReceived = audioHeader.sampleCounter + sampleSize;
 			return null;
+		}
 
 		queue.writeAhead(slotsAhead).played = false;
 		readMessageInPlace(raw, queue.writeAhead(slotsAhead));
@@ -357,8 +360,9 @@ AudioMessage* placeMessage(Queue)(ref Queue queue, const (ubyte[]) raw, ref long
   	// received earlier message later
 		long samplesTooLate = samplesReceived - audioHeader.sampleCounter;
 		size_t slotsBehind = cast(size_t)(samplesTooLate / sampleSize);
-		if (!queue.canWriteBehind(slotsBehind))
+		if (!queue.canWriteBehind(slotsBehind)) {
 			return null;
+		}
 
 		queue.writeBehind(slotsBehind).played = false;
 		readMessageInPlace(raw, queue.writeBehind(slotsBehind));
@@ -374,24 +378,128 @@ AudioMessage* placeMessage(Queue)(ref Queue queue, const (ubyte[]) raw, ref long
 }
 
 unittest {
+	auto queue = CircularQueue!(AudioMessage, 11)();
+	long samplesReceived = 0;
+	queue.placeMessage(AudioMessage(0, 0,  [0,1]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 2, [2,3]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 6, [6,7]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 4, [4,5]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 8, [8,9]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 16, [16,17]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 14, [14,15]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 10, [10,11]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 18, [18,19]).serialize, samplesReceived, 2);
+	queue.placeMessage(AudioMessage(0, 12, [12,13]).serialize, samplesReceived, 2);
+
+	queue.currentRead.buffer.shouldEqual([0,1]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([2,3]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([4,5]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([6,7]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([8,9]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([10,11]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([12,13]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([14,15]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([16,17]); queue.advanceRead();
+	queue.currentRead.buffer.shouldEqual([18,19]); queue.advanceRead();
+
+	queue.empty.shouldEqual(true);
+}
+
+unittest {
 	auto queue = CircularQueue!(AudioMessage, 6)();
 	long samplesReceived = 0;
-	queue.placeMessage(AudioMessage(0, 0, [0,1,2,3,4,5,6,7,8,9]).serialize, samplesReceived, 10);
-	queue.placeMessage(AudioMessage(0, 10, [10,11,12,13,14,15,16,17,18,19]).serialize, samplesReceived, 10);
-	queue.placeMessage(AudioMessage(0, 30, [30,31,32,33,34,35,36,37,38,39]).serialize, samplesReceived, 10);
-	queue.placeMessage(AudioMessage(0, 20, [20,21,22,23,24,25,26,27,28,29]).serialize, samplesReceived, 10);
-	queue.placeMessage(AudioMessage(0, 40, [40,41,42,43,44,45,46,47,48,49]).serialize, samplesReceived, 10);
+	long masterCounter = 0;
+	void write(long masterCounter, short[] raw, in size_t line = __LINE__) {
+		auto msg = queue.placeMessage(AudioMessage(0, masterCounter, raw).serialize, samplesReceived, 2);
+		msg.shouldNotBeNull(__FILE__, line);
+		msg.buffer.shouldEqual(raw, __FILE__, line);
+	}
 
-	queue.currentRead.buffer.shouldEqual([0,1,2,3,4,5,6,7,8,9]);
-	queue.advanceRead();
-	queue.currentRead.buffer.shouldEqual([10,11,12,13,14,15,16,17,18,19]);
-	queue.advanceRead();
-	queue.currentRead.buffer.shouldEqual([20,21,22,23,24,25,26,27,28,29]);
-	queue.advanceRead();
-	queue.currentRead.buffer.shouldEqual([30,31,32,33,34,35,36,37,38,39]);
-	queue.advanceRead();
-	queue.currentRead.buffer.shouldEqual([40,41,42,43,44,45,46,47,48,49]);
-	queue.advanceRead();
+	auto popFront() {
+		auto buf = queue.currentRead.buffer;
+		queue.advanceRead();
+		return buf;
+	}
+
+	write(0, [0,1]);
+	write(2, [2,3]);
+	write(6, [6,7]);
+	write(4, [4,5]);
+
+	popFront.shouldEqual([0,1]);
+	popFront.shouldEqual([2,3]);
+	popFront.shouldEqual([4,5]);
+
+	write(12, [12,13]);
+	write(8, [8,9]);
+
+	popFront.shouldEqual([6,7]);
+
+	write(10, [10,11]);
+
+	popFront.shouldEqual([8,9]);
+	popFront.shouldEqual([10,11]);
+	
+	write(18, [18,19]);
+	write(16, [16,17]);
+	write(14, [14,15]);
+
+	popFront.shouldEqual([12,13]);
+
+	popFront.shouldEqual([14,15]);
+	popFront.shouldEqual([16,17]);
+	popFront.shouldEqual([18,19]);
+
+	queue.empty.shouldEqual(true);
+}
+
+unittest {
+	auto queue = CircularQueue!(AudioMessage, 6)();
+	long samplesReceived = 0;
+	long masterCounter = 0;
+	void write(long masterCounter, short[] raw, in size_t line = __LINE__) {
+		auto msg = queue.placeMessage(AudioMessage(0, masterCounter, raw).serialize, samplesReceived, 2);
+		msg.shouldNotBeNull(__FILE__, line);
+		msg.buffer.shouldEqual(raw, __FILE__, line);
+	}
+	void writeFull(long masterCounter, short[] raw, in size_t line = __LINE__) {
+		auto msg = queue.placeMessage(AudioMessage(0, masterCounter, raw).serialize, samplesReceived, 2);
+		(msg is null).shouldBeTrue(__FILE__, line);
+	}
+
+	auto popFront() {
+		auto buf = queue.currentRead.buffer;
+		queue.advanceRead();
+		return buf;
+	}
+
+	write(0, [0,1]);
+	write(2, [2,3]);
+	write(6, [6,7]);
+	write(4, [4,5]);
+	write(8, [8,9]);
+	writeFull(12, [12,13]);
+
+	popFront.shouldEqual([0,1]);
+	popFront.shouldEqual([2,3]);
+	popFront.shouldEqual([4,5]);
+	popFront.shouldEqual([6,7]);
+
+	write(10, [10,11]);
+
+	popFront.shouldEqual([8,9]);
+	popFront.shouldEqual([10,11]);
+	
+	write(18, [18,19]);
+	write(16, [16,17]);
+	write(14, [14,15]);
+
+	popFront.shouldEqual([0,1]);
+
+	popFront.shouldEqual([14,15]);
+	popFront.shouldEqual([16,17]);
+	popFront.shouldEqual([18,19]);
+
 	queue.empty.shouldEqual(true);
 }
 
@@ -408,6 +516,7 @@ class OutputPort : Port
 		long sampleCounter;
 		size_t sampleOffset;
 		CircularQueue!(AudioMessage, 172) queue;
+		size_t messageLag;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 200) {
 		this.idx = idx;
@@ -416,7 +525,8 @@ class OutputPort : Port
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 		auto samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
 		assert(cast(size_t)(hnsecDelay / hnsecPerSample) < (queue.capacity * 64),"Cannot lag more than buffer");
-		writefln("Going to lag %s%% of queue", cast(double)(samplesToLag) / 64 / queue.capacity);
+		messageLag = samplesToLag / 64;
+		writefln("Going to lag %s%% of queue", cast(double)(messageLag) / queue.capacity);
 	}
 	override void start(Transport transport)
 	{
@@ -452,6 +562,7 @@ class OutputPort : Port
 			bool started = false;
 			Stats stats = Stats(20);
 			long samplesReceived;
+			long lastSamplesReceived;
 			while(1) {
 				auto raw = transport.acceptRaw();
 				switch (raw.header.type) {
@@ -460,14 +571,19 @@ class OutputPort : Port
 						if (msg is null)
 							continue;
 
+						if (lastSamplesReceived + 64 == samplesReceived)
+							 stats.inOrder++;
+						else
+							 stats.outOfOrder++;
+						lastSamplesReceived = msg.sampleCounter;
 						calcStats(*msg, stats, this.hnsecPerSample);
 
 						if (!started) {
 							if (stats.samples > 500 && stats.std.getMax < this.hnsecDelay) {
 								slaveStartTime = Clock.currStdTime;
-								auto masterStartTime = msg.startTime;
-								auto masterSampleCounter = msg.sampleCounter;
-								auto masterCurrentSampleTime = masterStartTime + cast(long)(masterSampleCounter * this.hnsecPerSample);
+								long masterStartTime = msg.startTime;
+								long masterSampleCounter = msg.sampleCounter;
+								long masterCurrentSampleTime = masterStartTime + cast(long)(masterSampleCounter * this.hnsecPerSample);
 								writefln("Current Mastertime = %s", masterCurrentSampleTime);
 								writefln("Current Slavetime = %s", slaveStartTime);
 								assert(slaveStartTime > masterCurrentSampleTime, "Clock out of sync");
@@ -503,8 +619,8 @@ class OutputPort : Port
 							}
 						} 
 						if ((msg.sampleCounter % 64000) == 0)
-							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max)",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax);
-						if (queue.full && !started) {
+							writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax, stats.inOrder, stats.outOfOrder);
+						if (queue.length + 1 > messageLag && !started) {
 							queue.advanceRead();	// we can only advance the read if the stream hasn't started....
 						}
 						break;
