@@ -110,7 +110,7 @@ void connectPort(ref CliState state) {
 			{
 				// connect
 				logInfo("Connecting.");
-				state.transport.send(LinkCommandMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], input.port.id, output.port.id, Id.random(), "239.255.255.99", 53533));
+				state.transport.send(LinkCommandMessage([0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9], input.port.id, output.port.id, Id.random(), "239.255.255.99", 53533, 64));
 			} else
 				logInfo("Abort");
 			state.handler = null;

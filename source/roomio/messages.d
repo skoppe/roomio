@@ -62,6 +62,7 @@ struct LinkCommandMessage {
   Id connection;
   string host;
   ushort port;
+  uint packetSize;
 }
 
 enum LinkStatus {

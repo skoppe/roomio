@@ -5,6 +5,8 @@ import roomio.port;
 import roomio.transport;
 
 import vibe.core.log;
+import vibe.core.core;
+
 
 enum Direction {
   In,
@@ -41,29 +43,40 @@ abstract class Connection {
     }
     return ConnectionInfo(id, port.id, other, direction, host, hostport);
   }
-  void kill() { 
-    port.kill();
-  }
+  void kill();
 }
 
 class OutgoingConnection : Connection {
-  private Transport transport;
-  this(Id id, Port port, Id other, string host, ushort hostport) {
+  private {
+    shared(Opener) opener;
+  }
+  this(Id id, Port port, Id other, string host, ushort hostport, uint packetSize) {
     super(id, port, other, Direction.Out, host, hostport);
-    logInfo("Opening outgoing connection %s to %s : %s", port.name, host, hostport);
+    opener = port.createOpener(packetSize);
     assert(port.type == PortType.Input);
-    transport = new Transport(host, hostport, hostport, false);
-    port.start(transport);
+    logInfo("Opening outgoing connection %s to %s : %s", port.name, host, hostport);
+    runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
+      opener.start(new Transport(host, hostport, hostport, false));
+    }, opener, host, hostport);
+  }
+  override void kill() {
+    opener.kill();
   }
 }
 
 class IncomingConnection : Connection {
-  private Transport transport;
-  this(Id id, Port port, Id other, string host, ushort hostport) {
+  private {
+    shared(Opener) opener;
+  }
+  this(Id id, Port port, Id other, string host, ushort hostport, uint packetSize) {
     super(id, port, other, Direction.In, host, hostport);
     logInfo("Opening incoming connection %s from %s : %s", port.name, host, hostport);
     assert(port.type == PortType.Output);
-    transport = new Transport(host, hostport, hostport, false);
-    port.start(transport);
+    auto transport = new Transport(host, hostport, hostport, false);
+    opener = port.createOpener(packetSize);
+    opener.start(transport);
+  }
+  override void kill() {
+    opener.kill();
   }
 }
