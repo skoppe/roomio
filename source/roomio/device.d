@@ -90,9 +90,9 @@ class Device {
     killConnection(connections.find!(c => c.port is source || c.port is target));
     Connection connection;
     if (source !is null) {
-      connection = new OutgoingConnection(msg.connection, source, msg.target, msg.host, msg.port, msg.packetSize);
+      connection = new OutgoingConnection(msg.connection, source, msg.target, msg.host.dup, msg.port, msg.packetSize);
     } else if (target !is null) {
-      connection = new IncomingConnection(msg.connection, target, msg.source, msg.host, msg.port, msg.packetSize);
+      connection = new IncomingConnection(msg.connection, target, msg.source, msg.host.dup, msg.port, msg.packetSize);
     }
     connections ~= connection;
     transport.send(LinkReplyMessage(msg.nonce, id, connection.getInfo, LinkStatus.Active, ""));

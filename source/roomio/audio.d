@@ -58,7 +58,8 @@ shared class InputPortOpener : Opener
 		{
 			Pa_StartStream(cast(Stream*)stream);
 			latency = Pa_GetStreamInfo(cast(Stream*)stream).inputLatency;
-			tid = runTask({
+			running = true;
+			//tid = runTask({
 				short[] buffer = new short[params.packetSize];
 				long sampleCounter;
 				long startTime = Clock.currStdTime;
@@ -69,7 +70,7 @@ shared class InputPortOpener : Opener
 					yield();
 				}
 				Pa_CloseStream(cast(Stream*)stream);
-			});
+			//});
 		}
 	}
 	override void kill() {
@@ -634,7 +635,7 @@ struct StreamState {
 	uint packetSize;
 	long sampleCounter;
 	size_t sampleOffset;
-	CircularQueue!(AudioMessage, 172) queue;
+	CircularQueue!(AudioMessage, 128) queue;
 }
 
 struct StreamParameters {
@@ -683,7 +684,7 @@ shared class OutputPortOpener : shared(Opener){
 		});
 	}
 	override void kill() {
-		
+
 	}
 }
 

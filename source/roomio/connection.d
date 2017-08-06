@@ -72,9 +72,10 @@ class IncomingConnection : Connection {
     super(id, port, other, Direction.In, host, hostport);
     logInfo("Opening incoming connection %s from %s : %s", port.name, host, hostport);
     assert(port.type == PortType.Output);
-    auto transport = new Transport(host, hostport, hostport, false);
     opener = port.createOpener(packetSize);
-    opener.start(transport);
+    runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
+      opener.start(new Transport(host, hostport, hostport, false));
+    }, opener, host, hostport);
   }
   override void kill() {
     opener.kill();

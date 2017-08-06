@@ -29,7 +29,7 @@ struct UdpVibeD {
     conn.multicastLoopback = loopback;
     import std.stdio : writefln;
     try {
-      conn.setDSCP(46);
+      conn.setDSCP(40);
       } catch (Exception e) {
         writefln("%s: %s", e.msg, errno);
       }
