@@ -51,7 +51,7 @@ shared class InputPortOpener : Opener
 	{
 		auto inputDeviceInfo = Pa_GetDeviceInfo(idx);
 		auto inputParams = PaStreamParameters(idx, cast(int)params.channels, paInt16, inputDeviceInfo.defaultLowInputLatency, null);
-		auto result = Pa_OpenStream(cast(void**)&stream, &inputParams, null, params.samplerate, paFramesPerBufferUnspecified, 0, null, null );
+		auto result = Pa_OpenStream(cast(void**)&stream, &inputParams, null, params.samplerate, params.framesPerBuffer, 0, null, null );
 		if (result != paNoError) {
 			writeln(Pa_GetErrorText(result).fromStringz);
 		} else
@@ -60,14 +60,13 @@ shared class InputPortOpener : Opener
 			latency = Pa_GetStreamInfo(cast(Stream*)stream).inputLatency;
 			running = true;
 			//tid = runTask({
-				short[] buffer = new short[params.packetSize];
+				short[] buffer = new short[params.framesPerBuffer];
 				long sampleCounter;
 				long startTime = Clock.currStdTime;
 				while(running) {
-					Pa_ReadStream(cast(Stream*)stream, buffer[].ptr, params.packetSize);
+					Pa_ReadStream(cast(Stream*)stream, buffer[].ptr, params.framesPerBuffer);
 					transport.send(AudioMessage(startTime, sampleCounter, buffer[]));
-					sampleCounter += params.packetSize;
-					yield();
+					sampleCounter += params.framesPerBuffer;
 				}
 				Pa_CloseStream(cast(Stream*)stream);
 			//});
@@ -82,7 +81,7 @@ shared class InputPortOpener : Opener
 struct StreamInputParameters {
 	uint channels;
 	double samplerate;
-	uint packetSize;
+	uint framesPerBuffer;
 }
 
 class InputPort : Port
@@ -97,10 +96,10 @@ class InputPort : Port
 		this.idx = idx;
 		super(Id.random(), PortType.Input, name, channels, samplerate);
 	}
-  override shared(Opener) createOpener(uint packetSize)
+  override shared(Opener) createOpener(uint framesPerBuffer)
   {
 		assert(opener is null, "Port already opened");
-		opener = new shared(InputPortOpener)(idx, StreamInputParameters(channels, samplerate, packetSize));
+		opener = new shared(InputPortOpener)(idx, StreamInputParameters(channels, samplerate, framesPerBuffer));
 		return opener;
   }
 }
@@ -226,12 +225,17 @@ void calcStats(ref AudioMessage message, ref Stats stats, double hnsecPerSample)
 	assert(slaveTime > masterTime, "Clock out of sync");
 	auto currentWireLatency = slaveTime - masterTime;
 	stats.std.add(cast(double)currentWireLatency);
+	if (stats.lastSlaveTime != 0)
+		stats.interval.add(cast(double)slaveTime - stats.lastSlaveTime);
+	stats.lastSlaveTime = slaveTime;
 }
 
 struct Stats {
 	RunningStd std;
+	RunningStd interval;
 	uint samples;
 	uint inOrder, outOfOrder;
+	long lastSlaveTime;
 	this(uint memory) {
 		std = RunningStd(memory);
 		samples = 0;
@@ -539,7 +543,7 @@ extern(C) static int paOutputCallback(const(void)* inputBuffer, void* outputBuff
 	if (state.queue.empty || state.queue.currentRead.played) {
 		// we fill everything with silence
 		output[0..framesPerBuffer] = 0;
-		state.sampleCounter += state.packetSize;
+		state.sampleCounter += state.framesPerBuffer;
 		return paContinue;
 	}
 
@@ -551,6 +555,20 @@ extern(C) static int paOutputCallback(const(void)* inputBuffer, void* outputBuff
 	copySamples(state.queue, output, state.sampleOffset, state.sampleCounter);
 
 	return paContinue;
+}
+
+auto calcSamplesToLag(long masterCurrentSampleTime, long slaveStartTime, long hnsecDelay, double outputLatency, double samplerate) {
+	double hnsecPerSample = 10_000_000.0 / samplerate;
+	auto timestampToPlayCurrentMessage = masterCurrentSampleTime + hnsecDelay;
+	assert(timestampToPlayCurrentMessage > slaveStartTime, "Lagtime must be larger than latency difference");
+	auto hnsecsToLag = timestampToPlayCurrentMessage - slaveStartTime;
+	auto samplesLatency = cast(long)(outputLatency * samplerate);
+	return cast(long)(hnsecsToLag / hnsecPerSample) - samplesLatency;
+}
+
+@("calcSamplesToLag")
+unittest {
+	calcSamplesToLag(150_000_000, 150_100_000, 200_000, 256.0 / 44_100.0, 44_100.0).shouldEqual(185);
 }
 
 bool tryStartOutput(const StreamParameters params, ref StreamState state, ref Stats stats, ref AudioMessage msg, ref shared PortAudioOutput paOutput) {
@@ -572,7 +590,7 @@ bool tryStartOutput(const StreamParameters params, ref StreamState state, ref St
 	state.queue.advanceRead(); //TODO: Is this still necessary
 	auto outputDeviceInfo = Pa_GetDeviceInfo(paOutput.idx);
 	auto outputParams = PaStreamParameters(paOutput.idx, cast(int)params.channels, paInt16, outputDeviceInfo.defaultLowOutputLatency, null);
-	auto result = Pa_OpenStream(cast(void**)&paOutput.stream, null, &outputParams, params.samplerate, params.packetSize, 0, &paOutputCallback, cast(void*)&state );
+	auto result = Pa_OpenStream(cast(void**)&paOutput.stream, null, &outputParams, params.samplerate, params.framesPerBuffer, 0, &paOutputCallback, cast(void*)&state );
 	if (result != paNoError) {
 		writeln(Pa_GetErrorText(result).fromStringz);
 	} else
@@ -581,11 +599,7 @@ bool tryStartOutput(const StreamParameters params, ref StreamState state, ref St
 		writefln("Output latency = %s", paOutput.outputLatency);
 	}
 
-	auto timestampToPlayCurrentMessage = masterCurrentSampleTime + params.hnsecDelay;
-	assert(timestampToPlayCurrentMessage > slaveStartTime, "Lagtime must be larger than latency difference");
-	auto hnsecsToLag = timestampToPlayCurrentMessage - slaveStartTime;
-	auto samplesLatency = cast(long)(paOutput.outputLatency * params.samplerate);
-	auto samplesToLag = cast(long)(hnsecsToLag / params.hnsecPerSample) - samplesLatency;
+	auto samplesToLag = calcSamplesToLag(masterCurrentSampleTime, slaveStartTime, params.hnsecDelay, paOutput.outputLatency, params.samplerate);
 
 	// since the buffer is full, we need to advance it until it lags precisely hnsecDelay behind master
 	state.queue.advanceTillSamplesFromEnd(samplesToLag, masterSampleCounter, state.sampleCounter, state.sampleOffset);
@@ -596,21 +610,21 @@ bool tryStartOutput(const StreamParameters params, ref StreamState state, ref St
 }
 
 static void receiveAudioThread(Transport transport, const StreamParameters params, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
-	StreamState state = StreamState(params.packetSize);
+	StreamState state = StreamState(params.framesPerBuffer);
 	bool started = false;
 	Stats stats = Stats(20);
 	long samplesReceived;
 	long lastSamplesReceived;
-	long interval = 5000 * params.packetSize;
+	long interval = 5000 * params.framesPerBuffer;
 	while(1) {
 		auto raw = transport.acceptRaw();
 		switch (raw.header.type) {
 			case MessageType.Audio:
-				AudioMessage* msg = state.queue.placeMessage(raw.data, samplesReceived, params.packetSize);
+				AudioMessage* msg = state.queue.placeMessage(raw.data, samplesReceived, params.framesPerBuffer);
 				if (msg is null)
 					continue;
 
-				if (lastSamplesReceived + params.packetSize == samplesReceived)
+				if (lastSamplesReceived + params.framesPerBuffer == samplesReceived)
 					 stats.inOrder++;
 				else
 					 stats.outOfOrder++;
@@ -620,8 +634,10 @@ static void receiveAudioThread(Transport transport, const StreamParameters param
 				if (!started) {
 					started = tryStartOutput(stats, state, *msg);
 				}
-				if ((msg.sampleCounter % interval) == 0)
-					writefln("Queue size = %s, wire latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax, stats.inOrder, stats.outOfOrder);
+				if ((msg.sampleCounter % interval) == 0) {
+					writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax, stats.inOrder, stats.outOfOrder);
+					writefln("Interval (%s mean, %s std, %s local max)", stats.interval.mean, stats.interval.getStd, stats.interval.getMax);
+				}
 				if (state.queue.length + 1 > params.messageLag && !started) {
 					state.queue.advanceRead();	// we can only advance the read if the stream hasn't started....
 				}
@@ -632,7 +648,7 @@ static void receiveAudioThread(Transport transport, const StreamParameters param
 }
 
 struct StreamState {
-	uint packetSize;
+	uint framesPerBuffer;
 	long sampleCounter;
 	size_t sampleOffset;
 	CircularQueue!(AudioMessage, 128) queue;
@@ -642,7 +658,7 @@ struct StreamParameters {
 	uint channels;
 	double samplerate;
 	uint hnsecDelay;
-	uint packetSize;
+	uint framesPerBuffer;
 	double hnsecPerSample;
 	size_t messageLag;
 	this(uint channels, double samplerate, uint hnsecDelay) {
@@ -651,12 +667,16 @@ struct StreamParameters {
 		this.hnsecDelay = hnsecDelay;
 		this.hnsecPerSample = 10_000_000 / samplerate;
 	}
-	this(uint channels, double samplerate, uint hnsecDelay, uint packetSize) {
+	this(uint channels, double samplerate, uint hnsecDelay, uint framesPerBuffer) {
 		this(channels, samplerate, hnsecDelay);
-		this.packetSize = packetSize;
+		this.framesPerBuffer = framesPerBuffer;
 		size_t samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
-		messageLag = samplesToLag / packetSize;
+		messageLag = samplesToLag / framesPerBuffer;
 	}
+}
+
+unittest {
+	auto params = StreamParameters(1, 44_100, 200 * 10_000, 128);
 }
 
 struct PortAudioOutput {
@@ -700,10 +720,10 @@ class OutputPort : Port
 		this.idx = idx;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
-	override shared(Opener) createOpener(uint packetSize)
+	override shared(Opener) createOpener(uint framesPerBuffer)
 	{
 		assert(opener is null, "Port already opened");
-		opener = new shared(OutputPortOpener)(idx, StreamParameters(params.channels, params.samplerate, params.hnsecDelay, packetSize));
+		opener = new shared(OutputPortOpener)(idx, StreamParameters(params.channels, params.samplerate, params.hnsecDelay, framesPerBuffer));
 		return opener;
 	}
 }
