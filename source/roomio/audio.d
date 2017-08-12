@@ -640,8 +640,8 @@ void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref St
 	if (!threadState.started) {
 		threadState.started = tryStartOutput(threadState.stats, state, *msg);
 	}
-	assert(threadState.interval != 0L, "threadState.interval cannot be 0");
-	if ((msg.sampleCounter % threadState.interval) == 0L) {
+	assert(threadState.interval != 0, "threadState.interval cannot be 0");
+	if ((msg.sampleCounter % threadState.interval) == 0) {
 		writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, threadState.stats.std.mean, threadState.stats.std.getStd, threadState.stats.std.getMax, threadState.stats.inOrder, threadState.stats.outOfOrder);
 		writefln("Interval (%s mean, %s std, %s local max)", threadState.stats.interval.mean, threadState.stats.interval.getStd, threadState.stats.interval.getMax);
 	}
@@ -737,7 +737,8 @@ shared class OutputPortOpener : shared(Opener){
 	this(PaDeviceIndex idx, const StreamParameters param) {
 		this.paOutput = PortAudioOutput(idx);
 		this.params = params;
-		assert(this.params.framesPerBuffer != 0L, "this.params.framesPerBuffer cannot be 0");
+		writeln(params, " ", this.params);
+		assert(this.params.framesPerBuffer != 0, "this.params.framesPerBuffer cannot be 0");
 	}
 	override void start(Transport transport) {
 		//assert(cast(size_t)(params.hnsecDelay / params.hnsecPerSample) < (state.queue.capacity * 64),"Cannot lag more than buffer");
