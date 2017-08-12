@@ -711,8 +711,15 @@ struct StreamParameters {
 	}
 }
 
+@("StreamParameters")
 unittest {
-	auto params = StreamParameters(1, 44_100, 200 * 10_000, 128);
+	auto params = StreamParameters(1, 44_100, 200 * 10_000);
+	auto paramsWithFrames = StreamParameters(params.channels, params.samplerate, params.hnsecDelay, 128);
+	void test(const StreamParameters p) {
+		const StreamParameters params = p;
+		params.framesPerBuffer.shouldEqual(128);
+	}
+	test(paramsWithFrames);
 }
 
 struct PortAudioOutput {
@@ -730,6 +737,7 @@ shared class OutputPortOpener : shared(Opener){
 	this(PaDeviceIndex idx, const StreamParameters param) {
 		this.paOutput = PortAudioOutput(idx);
 		this.params = params;
+		assert(this.params.framesPerBuffer != 0L, "this.params.framesPerBuffer cannot be 0");
 	}
 	override void start(Transport transport) {
 		//assert(cast(size_t)(params.hnsecDelay / params.hnsecPerSample) < (state.queue.capacity * 64),"Cannot lag more than buffer");
