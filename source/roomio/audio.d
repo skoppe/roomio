@@ -666,6 +666,7 @@ unittest {
 }
 
 static void receiveAudioThread(Transport)(Transport transport, const StreamParameters params, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
+	assert(params.framesPerBuffer != 0, "params.framesPerBuffer cannot be 0");
 	StreamState state = StreamState(params.framesPerBuffer);
 	AudioThreadState threadState = AudioThreadState(false, Stats(20), 0, 0, 5000 * params.framesPerBuffer);
 	while(1) {
