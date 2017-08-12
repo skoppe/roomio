@@ -26,11 +26,21 @@ import roomio.testhelpers;
 private shared PaError initStatus;
 
 shared static this() {
-	initStatus = Pa_Initialize();
+	version(unittest) {
+
+	} else
+	{
+		initStatus = Pa_Initialize();
+	}
 }
 
 shared static ~this() {
-	Pa_Terminate();
+	version(unittest) {
+
+	} else
+	{
+		Pa_Terminate();
+	}
 }
 
 shared class InputPortOpener : Opener
@@ -630,7 +640,8 @@ void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref St
 	if (!threadState.started) {
 		threadState.started = tryStartOutput(threadState.stats, state, *msg);
 	}
-	if ((msg.sampleCounter % threadState.interval) == 0) {
+	assert(threadState.interval != 0L, "threadState.interval cannot be 0");
+	if ((msg.sampleCounter % threadState.interval) == 0L) {
 		writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, threadState.stats.std.mean, threadState.stats.std.getStd, threadState.stats.std.getMax, threadState.stats.inOrder, threadState.stats.outOfOrder);
 		writefln("Interval (%s mean, %s std, %s local max)", threadState.stats.interval.mean, threadState.stats.interval.getStd, threadState.stats.interval.getMax);
 	}
