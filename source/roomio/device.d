@@ -89,6 +89,7 @@ class Device {
     }
     killConnection(connections.find!(c => c.port is source || c.port is target));
     Connection connection;
+    assert(msg.packetSize > 0, "msg.packetSize cannot be 0");
     if (source !is null) {
       connection = new OutgoingConnection(msg.connection, source, msg.target, msg.host.dup, msg.port, msg.packetSize);
     } else if (target !is null) {

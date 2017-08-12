@@ -609,38 +609,62 @@ bool tryStartOutput(const StreamParameters params, ref StreamState state, ref St
 	return true;
 }
 
-static void receiveAudioThread(Transport transport, const StreamParameters params, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
-	StreamState state = StreamState(params.framesPerBuffer);
-	bool started = false;
-	Stats stats = Stats(20);
+struct AudioThreadState {
+	bool started;
+	Stats stats;
 	long samplesReceived;
 	long lastSamplesReceived;
-	long interval = 5000 * params.framesPerBuffer;
+	long interval;
+}
+
+void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref StreamState state, ref AudioThreadState threadState, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
+	assert(msg !is null);
+
+	if (threadState.lastSamplesReceived + params.framesPerBuffer == threadState.samplesReceived || threadState.lastSamplesReceived == 0)
+		 threadState.stats.inOrder++;
+	else
+		 threadState.stats.outOfOrder++;
+	threadState.lastSamplesReceived = msg.sampleCounter;
+	calcStats(*msg, threadState.stats, params.hnsecPerSample);
+
+	if (!threadState.started) {
+		threadState.started = tryStartOutput(threadState.stats, state, *msg);
+	}
+	if ((msg.sampleCounter % threadState.interval) == 0) {
+		writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, threadState.stats.std.mean, threadState.stats.std.getStd, threadState.stats.std.getMax, threadState.stats.inOrder, threadState.stats.outOfOrder);
+		writefln("Interval (%s mean, %s std, %s local max)", threadState.stats.interval.mean, threadState.stats.interval.getStd, threadState.stats.interval.getMax);
+	}
+	if (state.queue.length + 1 > params.messageLag && !threadState.started) {
+		state.queue.advanceRead();	// we can only advance the read if the stream hasn't started....
+	}
+}
+
+@("handleAudioMessage")
+unittest {
+	long counter = 0;
+	auto msg = AudioMessage(100_000, counter, [0,1,2,3]);
+	auto streamParams = StreamParameters(1, 44_100.0, 10_000, 4);
+	auto streamState = StreamState(4, 0, 0);
+	auto threadState = AudioThreadState(false, Stats(20), 0, 0, 5000 * streamParams.framesPerBuffer);
+
+	handleAudioMessage(&msg, streamParams, streamState, threadState, (ref Stats stats, ref StreamState state, ref AudioMessage msg){
+		return false;
+
+		// TEST the shit out of this!
+	});
+}
+
+static void receiveAudioThread(Transport)(Transport transport, const StreamParameters params, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
+	StreamState state = StreamState(params.framesPerBuffer);
+	AudioThreadState threadState = AudioThreadState(false, Stats(20), 0, 0, 5000 * params.framesPerBuffer);
 	while(1) {
 		auto raw = transport.acceptRaw();
 		switch (raw.header.type) {
 			case MessageType.Audio:
-				AudioMessage* msg = state.queue.placeMessage(raw.data, samplesReceived, params.framesPerBuffer);
+				AudioMessage* msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
 				if (msg is null)
 					continue;
-
-				if (lastSamplesReceived + params.framesPerBuffer == samplesReceived)
-					 stats.inOrder++;
-				else
-					 stats.outOfOrder++;
-				lastSamplesReceived = msg.sampleCounter;
-				calcStats(*msg, stats, params.hnsecPerSample);
-
-				if (!started) {
-					started = tryStartOutput(stats, state, *msg);
-				}
-				if ((msg.sampleCounter % interval) == 0) {
-					writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, stats.std.mean, stats.std.getStd, stats.std.getMax, stats.inOrder, stats.outOfOrder);
-					writefln("Interval (%s mean, %s std, %s local max)", stats.interval.mean, stats.interval.getStd, stats.interval.getMax);
-				}
-				if (state.queue.length + 1 > params.messageLag && !started) {
-					state.queue.advanceRead();	// we can only advance the read if the stream hasn't started....
-				}
+				msg.handleAudioMessage(params, state, threadState, tryStartOutput);
 				break;
 			default: break;
 		}
@@ -723,6 +747,7 @@ class OutputPort : Port
 	override shared(Opener) createOpener(uint framesPerBuffer)
 	{
 		assert(opener is null, "Port already opened");
+		assert(framesPerBuffer > 0, "Cannot have 0 frames per buffer");
 		opener = new shared(OutputPortOpener)(idx, StreamParameters(params.channels, params.samplerate, params.hnsecDelay, framesPerBuffer));
 		return opener;
 	}

@@ -54,7 +54,8 @@ class OutgoingConnection : Connection {
     super(id, port, other, Direction.Out, host, hostport);
     opener = port.createOpener(packetSize);
     assert(port.type == PortType.Input);
-    logInfo("Opening outgoing connection %s to %s : %s", port.name, host, hostport);
+    assert(packetSize > 0, "PacketSize cannot be 0");
+    logInfo("Opening outgoing Connection %s to %s : %s", port.name, host, hostport);
     runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
       opener.start(new Transport(host, hostport, hostport, false));
     }, opener, host, hostport);
@@ -72,6 +73,7 @@ class IncomingConnection : Connection {
     super(id, port, other, Direction.In, host, hostport);
     logInfo("Opening incoming connection %s from %s : %s", port.name, host, hostport);
     assert(port.type == PortType.Output);
+    assert(packetSize > 0, "PacketSize cannot be 0");
     opener = port.createOpener(packetSize);
     runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
       opener.start(new Transport(host, hostport, hostport, false));
