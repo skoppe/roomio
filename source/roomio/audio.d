@@ -675,7 +675,7 @@ static void receiveAudioThread(Transport)(Transport transport, const StreamParam
 		switch (raw.header.type) {
 			case MessageType.Audio:
 				AudioMessage* msg;
-				version (Debug) {
+				debug {
 					try {
 						msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
 					} catch (Exception e)
@@ -688,7 +688,7 @@ static void receiveAudioThread(Transport)(Transport transport, const StreamParam
 				}
 				if (msg is null)
 					continue;
-				version (Debug) {
+				debug {
 					try {
 						msg.handleAudioMessage(params, state, threadState, tryStartOutput);
 					} catch (Exception e)
