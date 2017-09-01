@@ -6,6 +6,7 @@ import roomio.transport;
 
 import vibe.core.log;
 import vibe.core.core;
+import vibe.core.concurrency : Isolated;
 
 
 enum Direction {
@@ -48,7 +49,7 @@ abstract class Connection {
 
 class OutgoingConnection : Connection {
   private {
-    shared(Opener) opener;
+    Isolated!(Opener) opener;
   }
   this(Id id, Port port, Id other, string host, ushort hostport, uint packetSize) {
     super(id, port, other, Direction.Out, host, hostport);
@@ -56,18 +57,19 @@ class OutgoingConnection : Connection {
     assert(port.type == PortType.Input);
     assert(packetSize > 0, "PacketSize cannot be 0");
     logInfo("Opening outgoing Connection %s to %s : %s", port.name, host, hostport);
-    runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
-      opener.start(new Transport(host, hostport, hostport, false));
+    runWorkerTaskH((Isolated!(Opener) opener, string host, ushort hostport){
+      opener.extract.start(new Transport(host, hostport, hostport, false));
     }, opener, host, hostport);
   }
   override void kill() {
-    opener.kill();
+    //opener.kill();
+    // TODO: call runWorkerTaskH.kill
   }
 }
 
 class IncomingConnection : Connection {
   private {
-    shared(Opener) opener;
+    Isolated!(Opener) opener;
   }
   this(Id id, Port port, Id other, string host, ushort hostport, uint packetSize) {
     super(id, port, other, Direction.In, host, hostport);
@@ -75,11 +77,12 @@ class IncomingConnection : Connection {
     assert(port.type == PortType.Output);
     assert(packetSize > 0, "PacketSize cannot be 0");
     opener = port.createOpener(packetSize);
-    runWorkerTaskH((shared(Opener) opener, string host, ushort hostport){
-      opener.start(new Transport(host, hostport, hostport, false));
+    runWorkerTaskH((Isolated!(Opener) opener, string host, ushort hostport){
+      opener.extract.start(new Transport(host, hostport, hostport, false));
     }, opener, host, hostport);
   }
   override void kill() {
-    opener.kill();
+    //opener.kill();
+    // TODO: call runWorkerTaskH.kill
   }
 }

@@ -3,6 +3,8 @@ module roomio.port;
 import roomio.id;
 import roomio.transport;
 
+import vibe.core.concurrency : Isolated;
+
 enum PortType {
   Input = 1,
   Output = 2
@@ -16,7 +18,7 @@ struct PortInfo {
   double samplerate;
 }
 
-abstract shared class Opener {
+abstract class Opener {
   void start(Transport transport);
   void kill();
 }
@@ -38,5 +40,5 @@ abstract class Port {
   PortInfo getInfo() {
     return PortInfo(id, type, name, channels, samplerate);
   }
-  shared(Opener) createOpener(uint packetSize);
+  Isolated!(Opener) createOpener(uint packetSize);
 }

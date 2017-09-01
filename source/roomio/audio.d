@@ -9,6 +9,7 @@ import roomio.stats;
 
 import vibe.core.core;
 import vibe.core.log;
+import vibe.core.concurrency : Isolated, assumeIsolated;
 
 import deimos.portaudio;
 import std.string;
@@ -43,17 +44,17 @@ shared static ~this() {
 	}
 }
 
-shared class InputPortOpener : Opener
+class InputPortOpener : Opener
 {
 	private {
 		const(PaDeviceIndex) idx;
-		const(StreamInputParameters) params;
+		immutable StreamInputParameters params;
 		PaTime latency;
-		Stream* stream;
-		Task tid;
+		shared Stream* stream;
+		//Task tid;
 		bool running;
 	}
-	this(const(PaDeviceIndex) idx, const(StreamInputParameters) params) {
+	this(const(PaDeviceIndex) idx, immutable StreamInputParameters params) {
 		this.idx = idx;
 		this.params = params;
 	}
@@ -100,17 +101,17 @@ class InputPort : Port
 		PaDeviceIndex idx;
 		bool running = true;
 		//Task tid;
-		shared(InputPortOpener) opener;
+		InputPortOpener opener;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate) {
 		this.idx = idx;
 		super(Id.random(), PortType.Input, name, channels, samplerate);
 	}
-  override shared(Opener) createOpener(uint framesPerBuffer)
+  override Isolated!(Opener) createOpener(uint framesPerBuffer)
   {
 		assert(opener is null, "Port already opened");
-		opener = new shared(InputPortOpener)(idx, StreamInputParameters(channels, samplerate, framesPerBuffer));
-		return opener;
+		opener = new InputPortOpener(idx, StreamInputParameters(channels, samplerate, framesPerBuffer));
+		return (cast(Opener)opener).assumeIsolated;
   }
 }
 
@@ -581,7 +582,7 @@ unittest {
 	calcSamplesToLag(150_000_000, 150_100_000, 200_000, 256.0 / 44_100.0, 44_100.0).shouldEqual(185);
 }
 
-bool tryStartOutput(const StreamParameters params, ref StreamState state, ref Stats stats, ref AudioMessage msg, ref shared PortAudioOutput paOutput) {
+bool tryStartOutput(immutable StreamParameters params, ref StreamState state, ref Stats stats, ref AudioMessage msg, ref PortAudioOutput paOutput) {
 	if (stats.samples < 500 || stats.std.getMax > params.hnsecDelay) {
 		if (stats.samples > 3000) {
 			assert(false, format("Network latency too high (%s mean, %s std, %s local max)", stats.std.mean, stats.std.getStd, stats.std.getMax));
@@ -703,12 +704,22 @@ struct StreamParameters {
 		this.hnsecDelay = hnsecDelay;
 		this.hnsecPerSample = 10_000_000 / samplerate;
 	}
-	this(uint channels, double samplerate, uint hnsecDelay, uint framesPerBuffer) {
+	this(this T)(uint channels, double samplerate, uint hnsecDelay, uint framesPerBuffer) {
 		this(channels, samplerate, hnsecDelay);
 		this.framesPerBuffer = framesPerBuffer;
 		size_t samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
 		messageLag = samplesToLag / framesPerBuffer;
 	}
+	/*this(uint channels, double samplerate, uint hnsecDelay, uint framesPerBuffer) shared {
+		this.channels = channels;
+		this.samplerate = samplerate;
+		this.hnsecDelay = hnsecDelay;
+		this.hnsecPerSample = 10_000_000 / samplerate;
+		this.framesPerBuffer = framesPerBuffer;
+		size_t samplesToLag = cast(size_t)(hnsecDelay / hnsecPerSample);
+		messageLag = samplesToLag / framesPerBuffer;
+		writeln("Shared", this);
+	}*/
 }
 
 @("StreamParameters")
@@ -728,16 +739,15 @@ struct PortAudioOutput {
 	PaTime outputLatency;
 }
 
-shared class OutputPortOpener : shared(Opener){
+class OutputPortOpener : Opener{
 	private {
 		PortAudioOutput paOutput;
-		const StreamParameters params;
+		immutable StreamParameters params;
 		Task tid;
 	}
-	this(PaDeviceIndex idx, const StreamParameters param) {
+	this(PaDeviceIndex idx, immutable StreamParameters params) {
 		this.paOutput = PortAudioOutput(idx);
 		this.params = params;
-		writeln(params, " ", this.params);
 		assert(this.params.framesPerBuffer != 0, "this.params.framesPerBuffer cannot be 0");
 	}
 	override void start(Transport transport) {
@@ -757,7 +767,7 @@ class OutputPort : Port
 {
 	private {
 		PaDeviceIndex idx;
-		shared(OutputPortOpener) opener;
+		OutputPortOpener opener;
 		StreamParameters params;
 	}
 	this(PaDeviceIndex idx, string name, uint channels, double samplerate, uint msDelay = 200) {
@@ -765,12 +775,13 @@ class OutputPort : Port
 		this.idx = idx;
 		super(Id.random(), PortType.Output, name, channels, samplerate);
 	}
-	override shared(Opener) createOpener(uint framesPerBuffer)
+	override Isolated!(Opener) createOpener(uint framesPerBuffer)
 	{
 		assert(opener is null, "Port already opened");
 		assert(framesPerBuffer > 0, "Cannot have 0 frames per buffer");
-		opener = new shared(OutputPortOpener)(idx, StreamParameters(params.channels, params.samplerate, params.hnsecDelay, framesPerBuffer));
-		return opener;
+		immutable StreamParameters parameters = StreamParameters(params.channels, params.samplerate, params.hnsecDelay, framesPerBuffer);
+		opener = new OutputPortOpener(idx, parameters);
+		return (cast(Opener)opener).assumeIsolated;
 	}
 }
 
