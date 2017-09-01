@@ -674,10 +674,30 @@ static void receiveAudioThread(Transport)(Transport transport, const StreamParam
 		auto raw = transport.acceptRaw();
 		switch (raw.header.type) {
 			case MessageType.Audio:
-				AudioMessage* msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
+				AudioMessage* msg;
+				version (Debug) {
+					try {
+						msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
+					} catch (Exception e)
+					{
+						msg = null;
+						writeln("Error in placeMessage: ",e.msg);
+					}
+				} else {
+					msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
+				}
 				if (msg is null)
 					continue;
-				msg.handleAudioMessage(params, state, threadState, tryStartOutput);
+				version (Debug) {
+					try {
+						msg.handleAudioMessage(params, state, threadState, tryStartOutput);
+					} catch (Exception e)
+					{
+						writeln("Error in handleAudioMessage: ",e.msg);
+					}
+				} else {
+					msg.handleAudioMessage(params, state, threadState, tryStartOutput);
+				}
 				break;
 			default: break;
 		}

@@ -8,6 +8,8 @@ dependency "vibe-d" path="../vibe.d/"
 dependency "portaudio" version="==1.0.0"
 dependency "d-option" version="==0.0.7"
 
+#-- update to core-event and check performance --
+
 configuration "executable" {
   mainSourceFile "source/app.d"
   targetType "executable"
