@@ -636,7 +636,7 @@ void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref St
 	else
 		 threadState.stats.outOfOrder++;
 	threadState.lastSamplesReceived = msg.sampleCounter;
-	calcStats(*msg, threadState.stats, params.hnsecPerSample);
+	//calcStats(*msg, threadState.stats, params.hnsecPerSample);
 
 	//if (!threadState.started) {
 		//threadState.started = tryStartOutput(threadState.stats, state, *msg);
