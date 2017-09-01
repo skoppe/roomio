@@ -638,17 +638,17 @@ void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref St
 	threadState.lastSamplesReceived = msg.sampleCounter;
 	calcStats(*msg, threadState.stats, params.hnsecPerSample);
 
-	if (!threadState.started) {
-		threadState.started = tryStartOutput(threadState.stats, state, *msg);
-	}
-	assert(threadState.interval != 0, "threadState.interval cannot be 0");
-	if ((msg.sampleCounter % threadState.interval) == 0) {
-		writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, threadState.stats.std.mean, threadState.stats.std.getStd, threadState.stats.std.getMax, threadState.stats.inOrder, threadState.stats.outOfOrder);
-		writefln("Interval (%s mean, %s std, %s local max)", threadState.stats.interval.mean, threadState.stats.interval.getStd, threadState.stats.interval.getMax);
-	}
-	if (state.queue.length + 1 > params.messageLag && !threadState.started) {
-		state.queue.advanceRead();	// we can only advance the read if the stream hasn't started....
-	}
+	//if (!threadState.started) {
+		//threadState.started = tryStartOutput(threadState.stats, state, *msg);
+	//}
+	//assert(threadState.interval != 0, "threadState.interval cannot be 0");
+	//if ((msg.sampleCounter % threadState.interval) == 0) {
+	//	writefln("Queue size = %s, latency (%s mean, %s std, %s local max), %s in-order, %s out-of-order",state.queue.length, threadState.stats.std.mean, threadState.stats.std.getStd, threadState.stats.std.getMax, threadState.stats.inOrder, threadState.stats.outOfOrder);
+	//	writefln("Interval (%s mean, %s std, %s local max)", threadState.stats.interval.mean, threadState.stats.interval.getStd, threadState.stats.interval.getMax);
+	//}
+	//if (state.queue.length + 1 > params.messageLag && !threadState.started) {
+	//	state.queue.advanceRead();	// we can only advance the read if the stream hasn't started....
+	//}
 }
 
 @("handleAudioMessage")
