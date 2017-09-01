@@ -678,7 +678,7 @@ static void receiveAudioThread(Transport)(Transport transport, const StreamParam
 				debug {
 					try {
 						msg = state.queue.placeMessage(raw.data, threadState.samplesReceived, params.framesPerBuffer);
-					} catch (Exception e)
+					} catch (Throwable e)
 					{
 						msg = null;
 						writeln("Error in placeMessage: ",e.msg);
@@ -691,7 +691,7 @@ static void receiveAudioThread(Transport)(Transport transport, const StreamParam
 				debug {
 					try {
 						msg.handleAudioMessage(params, state, threadState, tryStartOutput);
-					} catch (Exception e)
+					} catch (Throwable e)
 					{
 						writeln("Error in handleAudioMessage: ",e.msg);
 					}
