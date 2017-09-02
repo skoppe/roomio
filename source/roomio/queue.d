@@ -15,13 +15,13 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   void pop(Args...)(void function (ref Element, Args) @nogc fun, Args args) @nogc {
-    assert(!empty);
+    assert(!empty, "Cannot pop on empty queue");
     fun(data[head], args);
     atomicStore(head,incr(head, 1));
   }
 
   void push(Args...)(void function (ref Element, Args) fun, Args args) {
-    assert(!full);
+    assert(!full, "Cannot push on full queue");
     fun(data[tail],args);
     atomicStore(tail,incr(tail, 1));
   }
@@ -31,7 +31,7 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   void advanceRead(size_t amount = 1) {
-    assert(!empty);
+    assert(!empty, "cannot advance read on empty queue");
     atomicStore(head,incr(head, amount));
   }
 
@@ -40,7 +40,7 @@ struct CircularQueue(Element, size_t Size) {
   }
 
   void advanceWrite(size_t amount = 1) {
-    assert(!full);
+    assert(!full, "cannot advance write on full queue");
     atomicStore(tail,incr(tail, amount));
   }
 

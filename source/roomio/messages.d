@@ -197,7 +197,7 @@ void writeMessage(T, Sink)(T msg, ref Sink sink)
   auto size = messageSize(msg);
   sink.reserve(size + headerSize);
   auto type = getMessageEnumType(msg);
-  assert(size < ushort.max);
+  assert(size < ushort.max, "Size cannot exceed ushort.max");
   Header hdr = Header(1, cast(ushort)size, type);
   auto cerealizer = CerealiserImpl!(Sink)(sink);
   cerealizer.write(hdr);

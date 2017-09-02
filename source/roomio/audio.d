@@ -279,7 +279,7 @@ struct Stats {
 }
 
 void copyToWithVolume(short[] source, short[] target, double volume = 0.5) {
-	assert(source.length == target.length);
+	assert(source.length == target.length, "Source and target must be same for copyToWithVolume");
 	foreach(idx; 0..source.length)
 		target[idx] = cast(short)(source[idx] * volume);
 }
@@ -654,7 +654,7 @@ struct AudioThreadState {
 }
 
 void handleAudioMessage(AudioMessage* msg, const StreamParameters params, ref StreamState state, ref AudioThreadState threadState, bool delegate (ref Stats, ref StreamState state, ref AudioMessage) tryStartOutput) {
-	assert(msg !is null);
+	assert(msg !is null, "msg cannot be null in handleAudioMessage");
 
 	if (threadState.lastSamplesReceived + params.framesPerBuffer == threadState.samplesReceived || threadState.lastSamplesReceived == 0)
 		 threadState.stats.inOrder++;
